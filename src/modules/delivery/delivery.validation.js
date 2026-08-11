@@ -1,0 +1,13 @@
+import { z } from 'zod';
+
+export const deliverySlotSchema = z.object({
+  date: z.coerce.date(),
+  startsAt: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/),
+  endsAt: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/),
+  capacity: z.number().int().positive(),
+  serviceArea: z.string().min(2).max(80).default('Patna'),
+  isActive: z.boolean().default(true),
+}).refine((data) => data.endsAt > data.startsAt, {
+  message: 'End time must be after start time',
+  path: ['endsAt'],
+});

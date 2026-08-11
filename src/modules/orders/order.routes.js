@@ -1,0 +1,51 @@
+import { Router } from 'express';
+import { created, ok } from '../../shared/utils/apiResponse.js';
+import { asyncHandler } from '../../shared/utils/asyncHandler.js';
+import { validate } from '../../shared/validation/validate.js';
+import { authorize, requireAuth } from '../auth/auth.middleware.js';
+import { audit } from '../audit/audit.service.js';
+import { createOrderSchema, quoteOrderSchema, updateStatusSchema } from './order.validation.js';
+import { createOrder, getOrderForCustomer, listCustomerOrders, quoteOrder, updateOrderStatus } from './order.service.js';
+import { streamInvoicePdf } from './invoice.service.js';
+import { Order } from './order.model.js';
+
+export const orderRoutes = Router();
+
+orderRoutes.use(requireAuth);
+
+orderRoutes.post('/quote', validate(quoteOrderSchema), asyncHandler(async (req, res) => {
+  ok(res, await quoteOrder(req.user, req.body), 'Order quote calculated');
+}));
+
+orderRoutes.post('/', validate(createOrderSchema), asyncHandler(async (req, res) => {
+  created(res, await createOrder(req.user, req.body), 'Order placed');
+}));
+
+orderRoutes.get('/me', asyncHandler(async (req, res) => {
+  ok(res, { orders: await listCustomerOrders(req.user._id) }, 'Orders loaded');
+}));
+
+orderRoutes.get('/:idOrNumber', asyncHandler(async (req, res) => {
+  ok(res, { order: await getOrderForCustomer(req.params.idOrNumber, req.user) }, 'Order loaded');
+}));
+
+orderRoutes.patch('/:id/status', authorize('admin', 'manager', 'support'), validate(updateStatusSchema), asyncHandler(async (req, res) => {
+  const before = await Order.findById(req.params.id);
+  const order = await updateOrderStatus(req.params.id, req.body, req.user);
+  await audit({ req, action: 'order.status.update', entityType: 'Order', entityId: order._id, before, after: order });
+  ok(res, { order }, 'Order status updated');
+}));
+
+orderRoutes.get('/:id/invoice', asyncHandler(async (req, res) => {
+  const order = await getOrderForCustomer(req.params.id, req.user);
+  streamInvoicePdf(order, res);
+}));
+
+orderRoutes.get('/', authorize('admin', 'manager', 'support'), asyncHandler(async (_req, res) => {
+  const page = Math.max(1, Number(_req.query.page) || 1);
+  const limit = Math.max(1, Math.min(500, Number(_req.query.limit) || 50));
+  const skip = (page - 1) * limit;
+  const orders = await Order.find().sort({ createdAt: -1 }).skip(skip).limit(limit);
+  const total = await Order.countDocuments();
+  ok(res, { orders, pagination: { page, limit, total, pages: Math.ceil(total / limit) } }, 'All orders loaded');
+}));

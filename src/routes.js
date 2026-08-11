@@ -1,0 +1,28 @@
+import { Router } from 'express';
+import { authRoutes } from './modules/auth/auth.routes.js';
+import { userRoutes } from './modules/users/user.routes.js';
+import { catalogRoutes } from './modules/catalog/catalog.routes.js';
+import { orderRoutes } from './modules/orders/order.routes.js';
+import { couponRoutes } from './modules/coupons/coupon.routes.js';
+import { deliveryRoutes } from './modules/delivery/delivery.routes.js';
+import { paymentRoutes } from './modules/payments/payment.routes.js';
+import { reportRoutes } from './modules/reports/report.routes.js';
+import { adminRoutes } from './modules/admin/admin.routes.js';
+import { addressRoutes } from './modules/addresses/address.routes.js';
+import { realtimeRoutes } from './modules/realtime/realtime.routes.js';
+import { settingsRoutes } from './modules/settings/settings.routes.js';
+
+export const routes = Router();
+
+routes.use('/auth', authRoutes);
+routes.use('/users', userRoutes);
+routes.use('/catalog', catalogRoutes);
+routes.use('/orders', orderRoutes);
+routes.use('/coupons', couponRoutes);
+routes.use('/delivery-slots', deliveryRoutes);
+routes.use('/payments', paymentRoutes);
+routes.use('/reports', reportRoutes);
+routes.use('/admin', adminRoutes);
+routes.use('/addresses', addressRoutes);
+routes.use('/realtime', realtimeRoutes);
+routes.use('/settings', settingsRoutes);
