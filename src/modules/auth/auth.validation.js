@@ -15,9 +15,7 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-export const refreshSchema = z.object({
-  refreshToken: z.string().min(20).optional(),
-});
+export const refreshSchema = z.object({}).strict();
 
 export const requestOtpSchema = z.object({
   phone: z.string().min(10).max(20),

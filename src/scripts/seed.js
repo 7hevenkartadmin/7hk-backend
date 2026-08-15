@@ -8,7 +8,6 @@ import { DeliverySlot } from '../modules/delivery/deliverySlot.model.js';
 import { Order } from '../modules/orders/order.model.js';
 import { Payment } from '../modules/payments/payment.model.js';
 import { PaymentIntent } from '../modules/payments/paymentIntent.model.js';
-import { OtpChallenge } from '../modules/auth/otp.model.js';
 import { AuditLog } from '../modules/audit/audit.model.js';
 import { products as frontendProducts } from '../../../src/data/products.js';
 import { categories as frontendCategories } from '../../../src/data/categories.js';
@@ -69,7 +68,6 @@ await connectDatabase();
 await Promise.all([
   Payment.deleteMany({}),
   PaymentIntent.deleteMany({}),
-  OtpChallenge.deleteMany({}),
   AuditLog.deleteMany({}),
   Order.deleteMany({}),
   Category.deleteMany({}),

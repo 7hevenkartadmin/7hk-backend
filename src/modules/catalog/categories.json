@@ -1,0 +1,626 @@
+[
+  {
+    "name": "Biscuits & Cookies",
+    "slug": "biscuits-cookies",
+    "description": "Biscuits, cookies, crackers, digestive biscuits and rusks.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1771667792511-375.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 1,
+    "subcategories": [
+      {
+        "name": "Sweet Biscuits",
+        "slug": "sweet-biscuits",
+        "description": "Classic sweet and everyday tea-time biscuits.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1771667792511-375.png",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Cream & Sandwich Biscuits",
+        "slug": "cream-sandwich-biscuits",
+        "description": "Cream-filled, sandwich and indulgent biscuits.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/f7e5b620-6e24-4dd9-9071-22197132ceb8.png",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Digestive & Health Biscuits",
+        "slug": "digestive-health-biscuits",
+        "description": "Digestive, high-fibre and health-positioned biscuits.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/210d83ef-3c34-4b4f-ac14-d4a273b1bda8.png",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Crackers & Savoury Biscuits",
+        "slug": "crackers-savoury-biscuits",
+        "description": "Salted, jeera, ajwain, herb and other savoury biscuits.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1773811093462-72.png",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Rusks & Toast",
+        "slug": "rusks-toast",
+        "description": "Packaged rusks, toast and crisp baked products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1777465439545-25.png",
+        "isActive": true,
+        "sortOrder": 5
+      }
+    ]
+  },
+  {
+    "name": "Dry Fruits, Nuts & Seeds",
+    "slug": "dry-fruits-nuts-seeds",
+    "description": "Nuts, dried fruits, dates, seeds, makhana and trail mixes.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1775721352613-43.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 2,
+    "subcategories": [
+      {
+        "name": "Almonds & Walnuts",
+        "slug": "almonds-walnuts",
+        "description": "Packaged almonds and walnuts.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1775721352613-43.png",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Cashews & Pistachios",
+        "slug": "cashews-pistachios",
+        "description": "Plain, roasted, salted and flavoured cashews and pistachios.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1775721352613-43.png",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Raisins & Dried Fruits",
+        "slug": "raisins-dried-fruits",
+        "description": "Raisins and other packaged dried fruits.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1779436000182-406.png",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Dates & Anjeer",
+        "slug": "dates-anjeer",
+        "description": "Packaged dates, anjeer and similar dried premium products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/9a25be01-92ee-4ceb-953c-a6042ca29d85.png",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Seeds & Trail Mix",
+        "slug": "seeds-trail-mix",
+        "description": "Chia, pumpkin, sunflower, mixed seeds and trail mixes.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1783917437156-12.png",
+        "isActive": true,
+        "sortOrder": 5
+      },
+      {
+        "name": "Makhana",
+        "slug": "makhana",
+        "description": "Plain and flavoured packaged makhana.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1773806551319-616.png",
+        "isActive": true,
+        "sortOrder": 6
+      }
+    ]
+  },
+  {
+    "name": "Snacks & Namkeen",
+    "slug": "snacks-namkeen",
+    "description": "Bhujia, namkeen, chips, dal snacks and ready-to-eat savouries.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1777953701494-9321.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 3,
+    "subcategories": [
+      {
+        "name": "Bhujia & Sev",
+        "slug": "bhujia-sev",
+        "description": "Bikaneri bhujia, aloo bhujia, sev and related snacks.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1777953701494-9321.png",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Mixtures & Namkeen",
+        "slug": "mixtures-namkeen",
+        "description": "Mixed namkeen, masala mixtures and traditional savoury mixes.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1771214347138-1480.png",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Chips & Crisps",
+        "slug": "chips-crisps",
+        "description": "Potato, banana and other packaged chips and crisps.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1773723048630-68.png",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Dal & Nut Snacks",
+        "slug": "dal-nut-snacks",
+        "description": "Moong dal, nut crackers and similar crunchy snacks.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1770963085463-92.png",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Soya & Extruded Snacks",
+        "slug": "soya-extruded-snacks",
+        "description": "Soya sticks and other extruded savoury snacks.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1781062614735-78.png",
+        "isActive": true,
+        "sortOrder": 5
+      },
+      {
+        "name": "Ready-to-Eat Savouries",
+        "slug": "ready-to-eat-savouries",
+        "description": "Kachori, bhelpuri mixes and other packaged savouries.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1777953701494-9768.png",
+        "isActive": true,
+        "sortOrder": 6
+      }
+    ]
+  },
+  {
+    "name": "Breakfast & Instant Foods",
+    "slug": "breakfast-instant-foods",
+    "description": "Noodles, pasta, cereals, oats, vermicelli and quick-preparation foods.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1779767007480-279.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 4,
+    "subcategories": [
+      {
+        "name": "Instant Noodles",
+        "slug": "instant-noodles",
+        "description": "Instant noodles and chowmein products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1779767007480-279.png",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Pasta & Macaroni",
+        "slug": "pasta-macaroni",
+        "description": "Penne, fusilli, macaroni and other packaged pasta.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780329263464-82.png",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Breakfast Cereals",
+        "slug": "breakfast-cereals",
+        "description": "Corn flakes, chocos and other ready-to-eat cereals.",
+        "icon": "ShoppingBasket",
+        "image": "",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Oats & Instant Breakfast",
+        "slug": "oats-instant-breakfast",
+        "description": "Plain oats, masala oats and other quick breakfast products.",
+        "icon": "ShoppingBasket",
+        "image": "",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Vermicelli & Sevai",
+        "slug": "vermicelli-sevai",
+        "description": "Plain, roasted and other packaged vermicelli and sevai.",
+        "icon": "ShoppingBasket",
+        "image": "",
+        "isActive": true,
+        "sortOrder": 5
+      },
+      {
+        "name": "Dessert & Instant Mixes",
+        "slug": "dessert-instant-mixes",
+        "description": "Kheer, falooda and similar instant dessert mixes.",
+        "icon": "ShoppingBasket",
+        "image": "",
+        "isActive": true,
+        "sortOrder": 6
+      }
+    ]
+  },
+  {
+    "name": "Atta, Rice & Dal",
+    "slug": "atta-rice-dal",
+    "description": "Everyday staples including atta, rice, dal, pulses, grains and flours.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/7abb5903-16e3-4b30-97ed-3fdf4156254b.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 5,
+    "subcategories": [
+      {
+        "name": "Atta & Wheat Flour",
+        "slug": "atta-wheat-flour",
+        "description": "Whole-wheat atta and wheat flour products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/7abb5903-16e3-4b30-97ed-3fdf4156254b.png",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Rice & Basmati Rice",
+        "slug": "rice-basmati-rice",
+        "description": "Everyday rice, basmati rice and specialty rice.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/94e1f113-eace-4e78-a518-13c1684b8fb0.png",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Dal & Pulses",
+        "slug": "dal-pulses",
+        "description": "Everyday dals, lentils and packaged pulses.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/216b56d4-08de-47f3-9e7b-291e8530ad6a.png",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Besan & Other Flours",
+        "slug": "besan-other-flours",
+        "description": "Besan and other commonly used packaged flours.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/204dd7110f9e41f8bd00b2bafdeff3ee.png",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Grains & Millets",
+        "slug": "grains-millets",
+        "description": "Packaged whole grains, millets and related staples.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/b26abd9e-edfa-402b-a9ad-dbb8af16e5e0.png",
+        "isActive": true,
+        "sortOrder": 5
+      }
+    ]
+  },
+  {
+    "name": "Masala, Spreads & Pickles",
+    "slug": "masala-spreads-pickles",
+    "description": "Spices, masalas, sauces, chutneys, jams, spreads and pickles.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/ff0b08eb-fc0c-4c3e-8442-d34db51da134.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 6,
+    "subcategories": [
+      {
+        "name": "Ground Spices",
+        "slug": "ground-spices",
+        "description": "Single ground spices such as chilli, turmeric and coriander powder.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/ff0b08eb-fc0c-4c3e-8442-d34db51da134.png",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Blended Masalas",
+        "slug": "blended-masalas",
+        "description": "Chaat masala and other blended spice mixes.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/be7427bd-fc44-406d-b3e6-c9d20c52f986.png",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Ketchup & Sauces",
+        "slug": "ketchup-sauces",
+        "description": "Tomato ketchup, chilli sauce, soya sauce, pasta sauce and similar condiments.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/8d68dd16-5a0c-4c22-806a-d7871a86941f.png",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Chutneys & Dips",
+        "slug": "chutneys-dips",
+        "description": "Schezwan chutney and other packaged chutneys and dips.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780638810587-232.png",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Jams & Spreads",
+        "slug": "jams-spreads",
+        "description": "Fruit jams and other packaged spreads.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/5e3c91b8-cc08-42b8-b7c5-872738bd614d.png",
+        "isActive": true,
+        "sortOrder": 5
+      },
+      {
+        "name": "Pickles",
+        "slug": "pickles",
+        "description": "Mango, chilli, mixed, garlic and other packaged pickles.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780638810587-232.png",
+        "isActive": true,
+        "sortOrder": 6
+      }
+    ]
+  },
+  {
+    "name": "Beverages & Wellness",
+    "slug": "beverages-wellness",
+    "description": "Coffee, drink mixes, health drinks and packaged wellness products.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1782447188914-4.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 7,
+    "subcategories": [
+      {
+        "name": "Coffee",
+        "slug": "coffee",
+        "description": "Instant coffee and related coffee products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1782447188914-4.png",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Sharbat & Syrups",
+        "slug": "sharbat-syrups",
+        "description": "Sharbat, concentrated syrups and traditional drink concentrates.",
+        "icon": "ShoppingBasket",
+        "image": "",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Glucose & Energy Drinks",
+        "slug": "glucose-energy-drinks",
+        "description": "Glucose powders and powdered energy drink mixes.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1775716967350-134.png",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Health Drink Powders",
+        "slug": "health-drink-powders",
+        "description": "Nutrition and health drink powders for general consumption.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1786420113452-1266.png",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Chyawanprash & Immunity",
+        "slug": "chyawanprash-immunity",
+        "description": "Chyawanprash and related packaged wellness products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1786354100193-169.png",
+        "isActive": true,
+        "sortOrder": 5
+      },
+      {
+        "name": "Sugar-Free & Special Nutrition",
+        "slug": "sugar-free-special-nutrition",
+        "description": "Sugar-free and special-purpose packaged nutrition products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/7abb5903-16e3-4b30-97ed-3fdf4156254b.png",
+        "isActive": true,
+        "sortOrder": 6
+      }
+    ]
+  },
+  {
+    "name": "Baby & Mother Nutrition",
+    "slug": "baby-mother-nutrition",
+    "description": "Packaged infant, child and mother nutrition products.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/26be904b-8dc7-4a70-8f13-35f02a77afec.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 8,
+    "subcategories": [
+      {
+        "name": "Infant Cereals",
+        "slug": "infant-cereals",
+        "description": "Age-stage infant cereal and complementary nutrition products.",
+        "icon": "ShoppingBasket",
+        "image": "",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Infant Formula",
+        "slug": "infant-formula",
+        "description": "Packaged infant formula products.",
+        "icon": "ShoppingBasket",
+        "image": "",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Growing-Up Nutrition",
+        "slug": "growing-up-nutrition",
+        "description": "Nutrition products intended for growing children.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/26be904b-8dc7-4a70-8f13-35f02a77afec.png",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Mother Nutrition",
+        "slug": "mother-nutrition",
+        "description": "Packaged nutrition products intended for mothers.",
+        "icon": "ShoppingBasket",
+        "image": "",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Specialized Child Nutrition",
+        "slug": "specialized-child-nutrition",
+        "description": "Other age-specific or specialized packaged nutrition for children.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1786420113452-1266.png",
+        "isActive": true,
+        "sortOrder": 5
+      }
+    ]
+  },
+  {
+    "name": "Personal Care & Beauty",
+    "slug": "personal-care-beauty",
+    "description": "Personal grooming, fragrance and skin-care products.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780408599290-43.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 9,
+    "subcategories": [
+      {
+        "name": "Deodorants & Body Sprays",
+        "slug": "deodorants-body-sprays",
+        "description": "Deodorants, body sprays and everyday fragrance products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780408599290-43.png",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Face Creams",
+        "slug": "face-creams",
+        "description": "Daily-use, brightening and beauty face creams.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1773718842673-378.png",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Moisturizers & Lotions",
+        "slug": "moisturizers-lotions",
+        "description": "Face and body moisturizers, lotions and hydrating products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1770961474120-81.png",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Skin Care",
+        "slug": "skin-care",
+        "description": "Other packaged face and body skin-care products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/422c71b3-fe62-4f0b-878c-aca439d4da57.png",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Personal Grooming",
+        "slug": "personal-grooming",
+        "description": "Other everyday personal grooming and care products.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1774678938546-11.png",
+        "isActive": true,
+        "sortOrder": 5
+      }
+    ]
+  },
+  {
+    "name": "Chocolates & Ice Cream",
+    "slug": "chocolates-ice-cream",
+    "description": "Chocolates, confectionery and packaged ice cream products.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/1d489c49-8787-4bdf-8d6b-023a30fc2ad1.png",
+    "parent": null,
+    "isActive": true,
+    "sortOrder": 10,
+    "subcategories": [
+      {
+        "name": "Chocolate Bars",
+        "slug": "chocolate-bars",
+        "description": "Regular and premium chocolate bars.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/1d489c49-8787-4bdf-8d6b-023a30fc2ad1.png",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Chocolate Bites & Minis",
+        "slug": "chocolate-bites-minis",
+        "description": "Mini chocolates, bites and share packs.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/2275c201-13a9-436b-b590-6ed63a775761.png",
+        "isActive": true,
+        "sortOrder": 2
+      },
+      {
+        "name": "Candies & Toffees",
+        "slug": "candies-toffees",
+        "description": "Candies, toffees and related confectionery.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1774871607455-37.png",
+        "isActive": true,
+        "sortOrder": 3
+      },
+      {
+        "name": "Ice Cream Tubs",
+        "slug": "ice-cream-tubs",
+        "description": "Family packs, tubs and take-home ice cream.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1778576673285-601.png",
+        "isActive": true,
+        "sortOrder": 4
+      },
+      {
+        "name": "Ice Cream Cones & Cups",
+        "slug": "ice-cream-cones-cups",
+        "description": "Single-serve cones and cups.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/2d2c9c05-37a9-45b2-ad28-8c2b04727d8b.png",
+        "isActive": true,
+        "sortOrder": 5
+      },
+      {
+        "name": "Ice Cream Bars & Sticks",
+        "slug": "ice-cream-bars-sticks",
+        "description": "Single-serve bars, sticks and coated ice cream.",
+        "icon": "ShoppingBasket",
+        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/6b03ee2f-719a-4c16-85d6-76dc8c90d2a0.png",
+        "isActive": true,
+        "sortOrder": 6
+      }
+    ]
+  }
+]

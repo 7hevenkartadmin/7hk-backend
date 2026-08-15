@@ -1,12 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { couponSchema } from '../src/modules/coupons/coupon.validation.js';
-import { deliverySlotSchema } from '../src/modules/delivery/delivery.validation.js';
+import { deliverySlotSchema, deliverySlotUpdateSchema } from '../src/modules/delivery/delivery.validation.js';
 import { createOrderSchema, quoteOrderSchema, updateStatusSchema } from '../src/modules/orders/order.validation.js';
 import { storeSettingsSchema } from '../src/modules/settings/settings.validation.js';
 import { addressSchema } from '../src/modules/users/user.validation.js';
+import { canTransitionOrderStatus } from '../src/modules/orders/order.service.js';
 
 const productId = '507f1f77bcf86cd799439011';
+
+test('delivery slot updates accept operational fields and reject empty changes', () => {
+  assert.equal(deliverySlotUpdateSchema.safeParse({ isActive: false }).success, true);
+  assert.equal(deliverySlotUpdateSchema.safeParse({ capacity: 75, serviceArea: 'Patna' }).success, true);
+  assert.equal(deliverySlotUpdateSchema.safeParse({}).success, false);
+  assert.equal(deliverySlotUpdateSchema.safeParse({ capacity: 0 }).success, false);
+});
 
 test('order quote validation rejects invalid product ids and unsafe quantities', () => {
   assert.equal(quoteOrderSchema.safeParse({ items: [{ productId: 'bad-id', quantity: 1 }] }).success, false);
@@ -43,6 +51,11 @@ test('order creation requires address or addressId and Razorpay proof for online
 test('order status validation allows only supported operational statuses', () => {
   assert.equal(updateStatusSchema.safeParse({ status: 'packed' }).success, true);
   assert.equal(updateStatusSchema.safeParse({ status: 'refunded' }).success, false);
+});
+
+test('out-for-delivery orders can be delivered but cannot be cancelled', () => {
+  assert.equal(canTransitionOrderStatus('out_for_delivery', 'delivered'), true);
+  assert.equal(canTransitionOrderStatus('out_for_delivery', 'cancelled'), false);
 });
 
 test('coupon validation enforces positive validity window and defaults', () => {

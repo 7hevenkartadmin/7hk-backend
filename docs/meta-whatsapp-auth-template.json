@@ -1,0 +1,26 @@
+{
+  "name": "sevenheaven_login_otp",
+  "language": "en_US",
+  "category": "AUTHENTICATION",
+  "message_send_ttl_seconds": 300,
+  "components": [
+    {
+      "type": "BODY",
+      "add_security_recommendation": true
+    },
+    {
+      "type": "FOOTER",
+      "code_expiration_minutes": 5
+    },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        {
+          "type": "OTP",
+          "otp_type": "COPY_CODE",
+          "text": "Copy Code"
+        }
+      ]
+    }
+  ]
+}

@@ -15,13 +15,104 @@ const envSchema = z.object({
   RAZORPAY_KEY_ID: z.string().optional().default(''),
   RAZORPAY_KEY_SECRET: z.string().optional().default(''),
   REDIS_URL: z.string().url().default('redis://127.0.0.1:6379'),
+  OTP_HMAC_SECRET: z.string().min(32).optional(),
   OTP_QUEUE_NAME: z.string().min(1).default('otp-notifications'),
   OTP_WORKER_ENABLED: z.coerce.boolean().default(true),
-  WHATSAPP_PROVIDER: z.string().default('mock'),
+  WHATSAPP_PROVIDER: z.enum(['disabled', 'mock', 'meta']).default('disabled'),
+  META_WHATSAPP_ACCESS_TOKEN: z.string().optional().default(''),
+  META_WHATSAPP_PHONE_NUMBER_ID: z.string().regex(/^\d+$/).optional(),
+  META_WHATSAPP_TEMPLATE_NAME: z.string().regex(/^[a-z0-9_]+$/).optional(),
+  META_WHATSAPP_TEMPLATE_LANGUAGE: z.string().regex(/^[a-z]{2,3}(?:_[A-Z]{2})?$/).default('en_US'),
+  META_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).optional(),
+  META_GRAPH_API_BASE_URL: z.string().url().default('https://graph.facebook.com'),
+  META_WHATSAPP_APP_SECRET: z.string().optional().default(''),
+  META_WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional().default(''),
   LOW_STOCK_THRESHOLD: z.coerce.number().int().positive().default(20),
   STORE_LATITUDE: z.coerce.number().default(26.713052497465416),
   STORE_LONGITUDE: z.coerce.number().default(85.68640273918543),
   DELIVERY_RADIUS_KM: z.coerce.number().positive().default(10),
+}).superRefine((data, ctx) => {
+  const placeholderSecret = (value) => value.startsWith('replace-with');
+  if (data.NODE_ENV === 'production'
+    && (data.JWT_ACCESS_SECRET.length < 32 || placeholderSecret(data.JWT_ACCESS_SECRET))) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['JWT_ACCESS_SECRET'],
+      message: 'A random access-token secret of at least 32 characters is required in production',
+    });
+  }
+  if (data.NODE_ENV === 'production'
+    && (data.JWT_REFRESH_SECRET.length < 32 || placeholderSecret(data.JWT_REFRESH_SECRET))) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['JWT_REFRESH_SECRET'],
+      message: 'A random refresh-token secret of at least 32 characters is required in production',
+    });
+  }
+  if (data.NODE_ENV === 'production' && !data.OTP_HMAC_SECRET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['OTP_HMAC_SECRET'],
+      message: 'A dedicated OTP HMAC secret is required in production',
+    });
+  }
+  if (data.NODE_ENV === 'production' && data.OTP_HMAC_SECRET
+    && (placeholderSecret(data.OTP_HMAC_SECRET)
+      || data.OTP_HMAC_SECRET === data.JWT_ACCESS_SECRET
+      || data.OTP_HMAC_SECRET === data.JWT_REFRESH_SECRET)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['OTP_HMAC_SECRET'],
+      message: 'OTP_HMAC_SECRET must be random and separate from both JWT secrets',
+    });
+  }
+  if (data.NODE_ENV === 'production' && !data.COOKIE_SECURE) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['COOKIE_SECURE'],
+      message: 'Secure cookies are required in production',
+    });
+  }
+  if (data.NODE_ENV === 'production' && data.JWT_ACCESS_SECRET === data.JWT_REFRESH_SECRET) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['JWT_REFRESH_SECRET'],
+      message: 'Access and refresh JWT secrets must be different',
+    });
+  }
+  if (data.NODE_ENV === 'production' && data.WHATSAPP_PROVIDER !== 'meta') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['WHATSAPP_PROVIDER'],
+      message: 'The Meta WhatsApp provider is required in production',
+    });
+  }
+  if (data.NODE_ENV === 'production' && !data.OTP_WORKER_ENABLED) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['OTP_WORKER_ENABLED'],
+      message: 'The OTP delivery worker is required in production',
+    });
+  }
+  const requiredMetaFields = [
+    ['META_WHATSAPP_ACCESS_TOKEN', data.META_WHATSAPP_ACCESS_TOKEN, 20],
+    ['META_WHATSAPP_PHONE_NUMBER_ID', data.META_WHATSAPP_PHONE_NUMBER_ID, 1],
+    ['META_WHATSAPP_TEMPLATE_NAME', data.META_WHATSAPP_TEMPLATE_NAME, 1],
+    ['META_GRAPH_API_VERSION', data.META_GRAPH_API_VERSION, 1],
+    ['META_WHATSAPP_APP_SECRET', data.META_WHATSAPP_APP_SECRET, 16],
+    ['META_WHATSAPP_WEBHOOK_VERIFY_TOKEN', data.META_WHATSAPP_WEBHOOK_VERIFY_TOKEN, 16],
+  ];
+  if (data.NODE_ENV === 'production' && data.WHATSAPP_PROVIDER === 'meta') {
+    requiredMetaFields.forEach(([field, value, minLength]) => {
+      if (!value || value.length < minLength || placeholderSecret(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: `${field} must be configured for Meta WhatsApp delivery`,
+        });
+      }
+    });
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -33,5 +124,6 @@ if (!parsed.success) {
 
 export const env = {
   ...parsed.data,
+  OTP_HMAC_SECRET: parsed.data.OTP_HMAC_SECRET || parsed.data.JWT_REFRESH_SECRET,
   CORS_ORIGINS: parsed.data.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
 };

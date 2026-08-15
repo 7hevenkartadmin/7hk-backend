@@ -19,8 +19,13 @@ export function applySecurity(app) {
     },
     credentials: true,
   }));
-  app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false }));
-  app.use(express.json({ limit: '1mb' }));
+  app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100000, standardHeaders: true, legacyHeaders: false }));
+  app.use(express.json({
+    limit: '1mb',
+    verify(req, _res, buffer) {
+      if (req.originalUrl.includes('/webhooks/whatsapp')) req.rawBody = Buffer.from(buffer);
+    },
+  }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
   app.use(cookieParser());
   app.use(mongoSanitize());

@@ -71,4 +71,11 @@ const orderSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
+orderSchema.index({ createdAt: -1 });
+orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1, createdAt: -1 });
+orderSchema.index({ 'customerSnapshot.name': 1 });
+orderSchema.index({ 'customerSnapshot.phone': 1 });
+orderSchema.index({ 'address.phone': 1 });
+
 export const Order = mongoose.model('Order', orderSchema);

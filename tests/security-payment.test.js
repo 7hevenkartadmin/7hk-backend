@@ -27,7 +27,7 @@ test('authorization middleware allows matching roles and rejects missing or wron
 });
 
 test('access and refresh tokens carry expected claims and verify with configured secrets', () => {
-  const user = { id: '507f1f77bcf86cd799439011', role: 'admin' };
+  const user = { id: '507f1f77bcf86cd799439011', role: 'admin', tokenVersion: 0 };
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
 
@@ -36,8 +36,13 @@ test('access and refresh tokens carry expected claims and verify with configured
 
   assert.equal(accessPayload.sub, user.id);
   assert.equal(accessPayload.role, 'admin');
+  assert.equal(accessPayload.type, 'access');
+  assert.equal(accessPayload.tokenVersion, 0);
   assert.equal(refreshPayload.sub, user.id);
-  assert.ok(refreshPayload.tokenVersion);
+  assert.equal(refreshPayload.type, 'refresh');
+  assert.equal(refreshPayload.tokenVersion, 0);
+  assert.equal(accessPayload.iss, '7heaven-api');
+  assert.deepEqual(accessPayload.aud, '7heaven-web');
 });
 
 test('token hashing is deterministic and does not expose raw token', () => {

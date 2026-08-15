@@ -2,12 +2,15 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { ok } from '../../shared/utils/apiResponse.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
+import { validate } from '../../shared/validation/validate.js';
 import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { Product } from '../catalog/product.model.js';
 import { Order } from '../orders/order.model.js';
 import { User } from '../users/user.model.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { adminOrdersQuerySchema, dashboardStatsQuerySchema } from './admin.validation.js';
+import { getDashboardStats, listAdminOrders } from './admin.service.js';
 
 export const adminRoutes = Router();
 
@@ -32,9 +35,12 @@ adminRoutes.get('/inventory/low-stock', asyncHandler(async (_req, res) => {
   ok(res, { products }, 'Low stock products loaded');
 }));
 
-adminRoutes.get('/orders', asyncHandler(async (_req, res) => {
-  const orders = await Order.find().sort({ createdAt: -1 }).limit(300);
-  ok(res, { orders }, 'Orders loaded');
+adminRoutes.get('/dashboard/stats', validate(dashboardStatsQuerySchema, 'query'), asyncHandler(async (req, res) => {
+  ok(res, await getDashboardStats(req.query.period), 'Dashboard statistics loaded');
+}));
+
+adminRoutes.get('/orders', validate(adminOrdersQuerySchema, 'query'), asyncHandler(async (req, res) => {
+  ok(res, await listAdminOrders(req.query), 'Orders loaded');
 }));
 
 adminRoutes.get('/orders/:id/invoice', asyncHandler(async (req, res) => {

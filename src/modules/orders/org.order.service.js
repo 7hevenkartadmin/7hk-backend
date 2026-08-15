@@ -32,7 +32,7 @@ const allowedTransitions = {
   placed: ["confirmed", "cancelled"],
   confirmed: ["packed", "cancelled"],
   packed: ["out_for_delivery", "cancelled"],
-  out_for_delivery: ["delivered", "cancelled"],
+  out_for_delivery: ["delivered"],
   delivered: [],
   cancelled: [],
 };

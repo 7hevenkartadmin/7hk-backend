@@ -10,7 +10,11 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
 
   const payload = verifyAccessToken(token);
   const user = await User.findById(payload.sub);
-  if (!user || user.status !== 'active') throw new AppError('Invalid session', 401, 'INVALID_SESSION');
+  if (!user
+    || user.status !== 'active'
+    || payload.tokenVersion !== Number(user.tokenVersion || 0)) {
+    throw new AppError('Invalid session', 401, 'INVALID_SESSION');
+  }
   req.user = user;
   next();
 });

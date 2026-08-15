@@ -28,6 +28,7 @@ const userSchema = new mongoose.Schema({
   status: { type: String, enum: ['active', 'blocked'], default: 'active' },
   addresses: [addressSchema],
   refreshTokenHash: { type: String, select: false },
+  tokenVersion: { type: Number, default: 0, min: 0 },
   lastLoginAt: Date,
 }, { timestamps: true });
 

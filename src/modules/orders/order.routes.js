@@ -4,8 +4,9 @@ import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { validate } from '../../shared/validation/validate.js';
 import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { audit } from '../audit/audit.service.js';
-import { createOrderSchema, quoteOrderSchema, updateStatusSchema } from './order.validation.js';
-import { createOrder, getOrderForCustomer, listCustomerOrders, quoteOrder, updateOrderStatus } from './order.service.js';
+import { deliveryOtpRateLimiter } from '../../shared/middlewares/rateLimiters.js';
+import { createOrderSchema, quoteOrderSchema, updateStatusSchema, verifyDeliveryOtpSchema } from './order.validation.js';
+import { createOrder, getOrderForCustomer, listCustomerOrders, quoteOrder, updateOrderStatus, verifyDeliveryOtp } from './order.service.js';
 import { streamInvoicePdf } from './invoice.service.js';
 import { Order } from './order.model.js';
 
@@ -19,6 +20,13 @@ orderRoutes.post('/quote', validate(quoteOrderSchema), asyncHandler(async (req, 
 
 orderRoutes.post('/', validate(createOrderSchema), asyncHandler(async (req, res) => {
   created(res, await createOrder(req.user, req.body), 'Order placed');
+}));
+
+orderRoutes.post('/admin/:id/verify-delivery-otp', authorize('admin', 'manager', 'support'), deliveryOtpRateLimiter, validate(verifyDeliveryOtpSchema), asyncHandler(async (req, res) => {
+  const before = await Order.findById(req.params.id);
+  const order = await verifyDeliveryOtp(req.params.id, req.body.otp, req.user);
+  await audit({ req, action: 'order.delivery.verify', entityType: 'Order', entityId: order._id, before, after: order });
+  ok(res, { order }, 'Delivery verified');
 }));
 
 orderRoutes.get('/me', asyncHandler(async (req, res) => {

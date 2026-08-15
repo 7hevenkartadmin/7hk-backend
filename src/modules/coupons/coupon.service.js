@@ -25,6 +25,12 @@ export async function listCoupons() {
   return Coupon.find().sort({ createdAt: -1 });
 }
 
+export async function updateCoupon(id, payload) {
+  const coupon = await Coupon.findByIdAndUpdate(id, payload, { new: true, runValidators: true });
+  if (!coupon) throw new AppError('Coupon not found', 404, 'COUPON_NOT_FOUND');
+  return coupon;
+}
+
 export async function listActiveCouponOffers() {
   const now = new Date();
   return Coupon.find({

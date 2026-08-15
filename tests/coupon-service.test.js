@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Coupon } from '../src/modules/coupons/coupon.model.js';
-import { calculateDiscount, createCoupon, listActiveCouponOffers, validateCoupon } from '../src/modules/coupons/coupon.service.js';
+import { calculateDiscount, createCoupon, listActiveCouponOffers, updateCoupon, validateCoupon } from '../src/modules/coupons/coupon.service.js';
 
 function withStub(object, method, implementation, callback) {
   const original = object[method];
@@ -97,6 +97,22 @@ test('createCoupon persists an uppercase code', async () => withStub(
     assert.equal(coupon.code, 'FRESH50');
   },
 ));
+
+test('updateCoupon persists admin status changes and reports missing coupons', async () => {
+  await withStub(Coupon, 'findByIdAndUpdate', async (id, payload, options) => {
+    assert.equal(id, 'coupon-1');
+    assert.deepEqual(payload, { isActive: false });
+    assert.deepEqual(options, { new: true, runValidators: true });
+    return { _id: id, ...payload };
+  }, async () => {
+    const coupon = await updateCoupon('coupon-1', { isActive: false });
+    assert.equal(coupon.isActive, false);
+  });
+
+  await withStub(Coupon, 'findByIdAndUpdate', async () => null, async () => {
+    await assert.rejects(() => updateCoupon('missing', { isActive: false }), { code: 'COUPON_NOT_FOUND' });
+  });
+});
 
 test('listActiveCouponOffers queries active usable coupons and caps the public list', async () => {
   const calls = [];

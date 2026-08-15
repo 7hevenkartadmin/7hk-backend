@@ -5,7 +5,7 @@ import { validate } from '../../shared/validation/validate.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { applyCouponSchema, couponSchema } from './coupon.validation.js';
-import { createCoupon, listActiveCouponOffers, listCoupons, validateCoupon } from './coupon.service.js';
+import { createCoupon, listActiveCouponOffers, listCoupons, updateCoupon, validateCoupon } from './coupon.service.js';
 
 export const couponRoutes = Router();
 
@@ -29,4 +29,9 @@ couponRoutes.get('/', asyncHandler(async (_req, res) => {
 
 couponRoutes.post('/', validate(couponSchema), asyncHandler(async (req, res) => {
   created(res, { coupon: await createCoupon(req.body) }, 'Coupon created');
+}));
+
+couponRoutes.patch('/:id/status', asyncHandler(async (req, res) => {
+  if (typeof req.body.isActive !== 'boolean') throw new AppError('isActive must be a boolean', 422, 'VALIDATION_ERROR');
+  ok(res, { coupon: await updateCoupon(req.params.id, { isActive: req.body.isActive }) }, 'Coupon status updated');
 }));

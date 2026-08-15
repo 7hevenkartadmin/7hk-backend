@@ -50,3 +50,7 @@ export const updateStatusSchema = z.object({
     phone: z.string().min(10),
   }).optional(),
 });
+
+export const verifyDeliveryOtpSchema = z.object({
+  otp: z.string().regex(/^\d{6}$/, 'Delivery OTP must contain 6 digits'),
+});

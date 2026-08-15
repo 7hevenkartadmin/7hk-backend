@@ -10,15 +10,16 @@ function publicUser(user) {
     email: user.email,
     phone: user.phone,
     role: user.role,
-    addresses: user.addresses,
   };
 }
 
 function tokenPayload(user, refreshToken) {
   return {
     user: publicUser(user),
-    accessToken: signAccessToken(user),
-    refreshToken,
+    tokens: {
+      accessToken: signAccessToken(user),
+      refreshToken,
+    },
   };
 }
 
@@ -59,7 +60,9 @@ export async function refreshSession(refreshToken) {
   if (!refreshToken) throw new AppError('Refresh token required', 401, 'REFRESH_REQUIRED');
   const payload = verifyRefreshToken(refreshToken);
   const user = await User.findById(payload.sub).select('+refreshTokenHash');
-  if (!user || user.refreshTokenHash !== hashToken(refreshToken)) {
+  if (!user
+    || payload.tokenVersion !== Number(user.tokenVersion || 0)
+    || user.refreshTokenHash !== hashToken(refreshToken)) {
     throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
   }
   if (user.status !== 'active') throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
@@ -70,7 +73,10 @@ export async function refreshSession(refreshToken) {
 }
 
 export async function logout(userId) {
-  await User.findByIdAndUpdate(userId, { $unset: { refreshTokenHash: 1 } });
+  await User.findByIdAndUpdate(userId, {
+    $unset: { refreshTokenHash: 1 },
+    $inc: { tokenVersion: 1 },
+  });
 }
 
 function normalizePhone(phone) {
@@ -79,15 +85,28 @@ function normalizePhone(phone) {
   return `+91${raw}`;
 }
 
-export async function requestOtp(phone) {
+export async function requestOtp(phone, requestId) {
   const normalizedPhone = normalizePhone(phone);
-  const result = await getSevenHeavenOtpService().requestOtp(buildLoginOtpPayload(normalizedPhone));
+  const result = await getSevenHeavenOtpService().requestOtp({
+    ...buildLoginOtpPayload(normalizedPhone),
+    requestId,
+  });
 
   return {
-    phone: normalizedPhone,
     expiresInSeconds: result.expiresIn,
-    otpId: result.otpId,
-    status: result.status,
+    resendAfterSeconds: result.resendAfterSeconds,
+  };
+}
+
+export async function resendOtp(phone, requestId) {
+  const normalizedPhone = normalizePhone(phone);
+  const result = await getSevenHeavenOtpService().resendOtp({
+    ...buildLoginOtpPayload(normalizedPhone),
+    requestId,
+  });
+  return {
+    expiresInSeconds: result.expiresIn,
+    resendAfterSeconds: result.resendAfterSeconds,
   };
 }
 

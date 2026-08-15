@@ -71,6 +71,21 @@ export async function createSlot(payload) {
   return DeliverySlot.create(payload);
 }
 
+export async function listAdminSlots() {
+  return DeliverySlot.find({ date: { $gte: startOfDay(-1) } }).sort({ date: 1, startsAt: 1 });
+}
+
+export async function updateSlot(id, payload) {
+  const existing = await DeliverySlot.findById(id);
+  if (!existing) throw new AppError('Delivery slot not found', 404, 'DELIVERY_SLOT_NOT_FOUND');
+  if (payload.capacity !== undefined && payload.capacity < existing.booked) {
+    throw new AppError('Capacity cannot be lower than current bookings', 409, 'SLOT_CAPACITY_CONFLICT');
+  }
+  existing.set(payload);
+  await existing.save();
+  return existing;
+}
+
 export async function reserveSlot(slotId, session) {
   const slot = await DeliverySlot.findOneAndUpdate(
     { _id: slotId, isActive: true, $expr: { $lt: ['$booked', '$capacity'] } },

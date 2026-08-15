@@ -15,16 +15,21 @@ import { calculateCartTotals, defaultDeliveryFee } from './pricing.service.js';
 import { distanceInKm } from '../../shared/utils/distance.js';
 import { env } from '../../config/env.js';
 import { deliveryFeeForDistance, getCodSettings } from '../settings/settings.service.js';
+import { deliveryOtpForOrder, matchesDeliveryOtp } from './delivery-otp.service.js';
 
 const orderId = customAlphabet('123456789ABCDEFGHJKLMNPQRSTUVWXYZ', 8);
 const allowedTransitions = {
   placed: ['confirmed', 'cancelled'],
   confirmed: ['packed', 'cancelled'],
   packed: ['out_for_delivery', 'cancelled'],
-  out_for_delivery: ['delivered', 'cancelled'],
+  out_for_delivery: ['delivered'],
   delivered: [],
   cancelled: [],
 };
+
+export function canTransitionOrderStatus(currentStatus, nextStatus) {
+  return Boolean(allowedTransitions[currentStatus]?.includes(nextStatus));
+}
 
 function enforceDeliveryRadius(address) {
   if (typeof address.latitude !== 'number' || typeof address.longitude !== 'number') {
@@ -226,21 +231,60 @@ async function validateCodEligibility(customer, payload, totals) {
   }
 }
 
+function customerOrderPayload(order) {
+  const payload = typeof order.toObject === 'function' ? order.toObject() : { ...order };
+  if (payload.status === 'out_for_delivery') payload.deliveryOtp = deliveryOtpForOrder(payload._id);
+  return payload;
+}
+
 export async function listCustomerOrders(customerId) {
-  return Order.find({ customer: customerId }).sort({ createdAt: -1 });
+  const orders = await Order.find({ customer: customerId }).sort({ createdAt: -1 });
+  return orders.map(customerOrderPayload);
 }
 
 export async function getOrderForCustomer(orderIdOrNumber, customer) {
   const filter = orderIdOrNumber.startsWith('ORD-') ? { orderNumber: orderIdOrNumber } : { _id: orderIdOrNumber };
   const order = await Order.findOne({ ...filter, customer: customer._id });
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+  return customerOrderPayload(order);
+}
+
+export async function verifyDeliveryOtp(id, otp, actor) {
+  const current = await Order.findById(id).select('_id status paymentMethod');
+  if (!current) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+  if (current.status !== 'out_for_delivery') {
+    throw new AppError('Delivery OTP can only be verified for an out-for-delivery order', 409, 'DELIVERY_OTP_NOT_READY');
+  }
+  if (!matchesDeliveryOtp(current._id, otp)) {
+    throw new AppError('Invalid delivery OTP', 401, 'DELIVERY_OTP_INVALID');
+  }
+  const order = await Order.findOneAndUpdate(
+    { _id: current._id, status: 'out_for_delivery' },
+    {
+      $set: {
+        status: 'delivered',
+        ...(current.paymentMethod === 'cod' ? { paymentStatus: 'paid' } : {}),
+      },
+      $push: { statusTimeline: { status: 'delivered', note: 'Delivery verified with customer OTP', actor: actor._id, at: new Date() } },
+    },
+    { new: true, runValidators: true },
+  );
+  if (!order) throw new AppError('Order delivery was already verified', 409, 'DELIVERY_ALREADY_VERIFIED');
+  publishOrderChange({
+    action: 'order.status.updated', orderId: String(order._id), orderNumber: order.orderNumber,
+    customerId: String(order.customer), status: order.status, paymentStatus: order.paymentStatus, total: order.total,
+  });
+  await sendOrderStatusNotification(order);
   return order;
 }
 
 export async function updateOrderStatus(id, payload, actor) {
   const order = await Order.findById(id);
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
-  if (!allowedTransitions[order.status]?.includes(payload.status)) {
+  if (payload.status === 'delivered') {
+    throw new AppError('Verify the customer delivery OTP to complete this order', 409, 'DELIVERY_OTP_REQUIRED');
+  }
+  if (!canTransitionOrderStatus(order.status, payload.status)) {
     throw new AppError(`Invalid order status transition from ${order.status} to ${payload.status}`, 409, 'INVALID_ORDER_TRANSITION');
   }
   order.status = payload.status;

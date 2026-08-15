@@ -5,18 +5,29 @@ import { validate } from '../../shared/validation/validate.js';
 import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { audit } from '../audit/audit.service.js';
 import { categorySchema, listProductsSchema, productSchema, searchSuggestionsSchema } from './catalog.validation.js';
-import { createCategory, createProduct, deleteProduct, getProductById, listCategories, listProducts, searchSuggestions, updateCategory, updateProduct } from './catalog.service.js';
+import { createCategory, createProduct, deleteProduct, getProductById, getProductRecommendations, listCategories, listHomepageShelves, listProducts, searchSuggestions, updateCategory, updateProduct } from './catalog.service.js';
 import { Product } from './product.model.js';
 import { Category } from './category.model.js';
+import { catalogImageUpload } from './catalog-upload.middleware.js';
+import { AppError } from '../../shared/utils/AppError.js';
 
 export const catalogRoutes = Router();
 
 catalogRoutes.get('/products', validate(listProductsSchema, 'query'), asyncHandler(async (req, res) => {
+  req.query.limit = Math.min(req.query.limit || 15, 15);
   ok(res, await listProducts(req.query), 'Products loaded');
+}));
+
+catalogRoutes.get('/home', asyncHandler(async (req, res) => {
+  ok(res, await listHomepageShelves(req.query.limit), 'Homepage catalog loaded');
 }));
 
 catalogRoutes.get('/search/suggestions', validate(searchSuggestionsSchema, 'query'), asyncHandler(async (req, res) => {
   ok(res, await searchSuggestions(req.query), 'Search suggestions loaded');
+}));
+
+catalogRoutes.get('/products/:idOrSlug/recommendations', asyncHandler(async (req, res) => {
+  ok(res, await getProductRecommendations(req.params.idOrSlug, req.query.limit), 'Product recommendations loaded');
 }));
 
 catalogRoutes.get('/products/:idOrSlug', asyncHandler(async (req, res) => {
@@ -32,10 +43,17 @@ catalogRoutes.get('/admin/categories', requireAuth, authorize('admin', 'manager'
 }));
 
 catalogRoutes.get('/admin/products', requireAuth, authorize('admin', 'manager'), validate(listProductsSchema, 'query'), asyncHandler(async (req, res) => {
-  ok(res, await listProducts(req.query, { includeInactive: req.query.includeInactive !== false }), 'Admin products loaded');
+  req.query.limit = Math.min(req.query.limit || 20, 50);
+  ok(res, await listProducts(req.query, { includeInactive: req.query.includeInactive !== false, exposeInventory: true }), 'Admin products loaded');
 }));
 
 catalogRoutes.use(requireAuth, authorize('admin', 'manager'));
+
+catalogRoutes.post('/uploads/images', catalogImageUpload, asyncHandler(async (req, res) => {
+  if (!req.file) throw new AppError('Image file is required', 422, 'IMAGE_REQUIRED');
+  const origin = `${req.protocol}://${req.get('host')}`;
+  created(res, { image: { url: `${origin}/uploads/catalog/${req.file.filename}` } }, 'Image uploaded');
+}));
 
 catalogRoutes.post('/products', validate(productSchema), asyncHandler(async (req, res) => {
   const product = await createProduct(req.body);
@@ -68,4 +86,11 @@ catalogRoutes.patch('/categories/:id', validate(categorySchema.partial()), async
   const category = await updateCategory(req.params.id, req.body);
   await audit({ req, action: 'category.update', entityType: 'Category', entityId: category._id, before, after: category });
   ok(res, { category }, 'Category updated');
+}));
+
+catalogRoutes.delete('/categories/:id', asyncHandler(async (req, res) => {
+  const before = await Category.findById(req.params.id);
+  const category = await updateCategory(req.params.id, { isActive: false });
+  await audit({ req, action: 'category.archive', entityType: 'Category', entityId: category._id, before, after: category });
+  ok(res, { category }, 'Category and linked catalog items archived');
 }));

@@ -1,11 +1,12 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { env } from '../../config/env.js';
-import { created, ok } from '../../shared/utils/apiResponse.js';
+import { ok } from '../../shared/utils/apiResponse.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { validate } from '../../shared/validation/validate.js';
 import { authRateLimiter, otpRateLimiter } from '../../shared/middlewares/rateLimiters.js';
 import { loginSchema, refreshSchema, registerSchema, requestOtpSchema, verifyOtpSchema } from './auth.validation.js';
-import { login, logout, refreshSession, registerCustomer, requestOtp, verifyOtp } from './auth.service.js';
+import { login, logout, refreshSession, registerCustomer, requestOtp, resendOtp, verifyOtp } from './auth.service.js';
 import { requireAuth } from './auth.middleware.js';
 
 export const authRoutes = Router();
@@ -16,42 +17,61 @@ const cookieOptions = {
   secure: env.COOKIE_SECURE,
 };
 
+const refreshCookiePath = `/api/${env.API_VERSION}/auth`;
+
 function attachCookies(res, tokens) {
-  res.cookie('accessToken', tokens.accessToken, { ...cookieOptions, maxAge: 15 * 60 * 1000 });
-  res.cookie('refreshToken', tokens.refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.cookie('accessToken', tokens.accessToken, { ...cookieOptions, path: '/', maxAge: 15 * 60 * 1000 });
+  res.cookie('refreshToken', tokens.refreshToken, {
+    ...cookieOptions,
+    path: refreshCookiePath,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+}
+
+function sendSession(res, result, message, statusCode = 200) {
+  attachCookies(res, result.tokens);
+  return ok(res, { user: result.user }, message, statusCode);
 }
 
 authRoutes.post('/register', authRateLimiter, validate(registerSchema), asyncHandler(async (req, res) => {
   const result = await registerCustomer(req.body);
-  attachCookies(res, result);
-  created(res, result, 'Customer registered');
+  sendSession(res, result, 'Customer registered', 201);
+}));
+
+authRoutes.post('/otp/resend', otpRateLimiter, validate(requestOtpSchema), asyncHandler(async (req, res) => {
+  ok(
+    res,
+    await resendOtp(req.body.phone, crypto.randomUUID()),
+    'A replacement OTP is being sent through WhatsApp.',
+  );
 }));
 
 authRoutes.post('/login', authRateLimiter, validate(loginSchema), asyncHandler(async (req, res) => {
   const result = await login(req.body);
-  attachCookies(res, result);
-  ok(res, result, 'Logged in');
+  sendSession(res, result, 'Logged in');
 }));
 
-authRoutes.post('/refresh', validate(refreshSchema), asyncHandler(async (req, res) => {
-  const result = await refreshSession(req.body.refreshToken || req.cookies?.refreshToken);
-  attachCookies(res, result);
-  ok(res, result, 'Session refreshed');
+authRoutes.post('/refresh', authRateLimiter, validate(refreshSchema), asyncHandler(async (req, res) => {
+  const result = await refreshSession(req.cookies?.refreshToken);
+  sendSession(res, result, 'Session refreshed');
 }));
 
 authRoutes.post('/otp/request', otpRateLimiter, validate(requestOtpSchema), asyncHandler(async (req, res) => {
-  ok(res, await requestOtp(req.body.phone), 'OTP sent');
+  ok(
+    res,
+    await requestOtp(req.body.phone, crypto.randomUUID()),
+    'If this number can receive WhatsApp messages, an OTP will arrive shortly.',
+  );
 }));
 
 authRoutes.post('/otp/verify', authRateLimiter, validate(verifyOtpSchema), asyncHandler(async (req, res) => {
   const result = await verifyOtp(req.body);
-  attachCookies(res, result);
-  ok(res, result, 'OTP verified');
+  sendSession(res, result, 'OTP verified');
 }));
 
 authRoutes.post('/logout', requireAuth, asyncHandler(async (req, res) => {
   await logout(req.user.id);
-  res.clearCookie('accessToken');
-  res.clearCookie('refreshToken');
+  res.clearCookie('accessToken', { ...cookieOptions, path: '/' });
+  res.clearCookie('refreshToken', { ...cookieOptions, path: refreshCookiePath });
   ok(res, null, 'Logged out');
 }));

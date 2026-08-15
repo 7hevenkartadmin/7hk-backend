@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DeliverySlot } from '../src/modules/delivery/deliverySlot.model.js';
-import { createSlot, listAvailableSlots, reserveSlot } from '../src/modules/delivery/delivery.service.js';
+import { createSlot, listAdminSlots, listAvailableSlots, reserveSlot, updateSlot } from '../src/modules/delivery/delivery.service.js';
 
 function withStub(object, method, implementation, callback) {
   const original = object[method];
@@ -59,6 +59,29 @@ test('createSlot delegates to DeliverySlot.create with the payload unchanged', a
 
     assert.equal(slot._id, 'created-slot');
     assert.equal(slot.capacity, 30);
+  });
+});
+
+test('listAdminSlots includes inactive and full upcoming slots', async () => {
+  const queryChain = {
+    sort(sort) {
+      assert.deepEqual(sort, { date: 1, startsAt: 1 });
+      return Promise.resolve([{ _id: 'slot-1', isActive: false }]);
+    },
+  };
+  await withStub(DeliverySlot, 'find', (filter) => {
+    assert.ok(filter.date.$gte instanceof Date);
+    assert.equal(filter.isActive, undefined);
+    return queryChain;
+  }, async () => {
+    const slots = await listAdminSlots();
+    assert.equal(slots[0].isActive, false);
+  });
+});
+
+test('updateSlot rejects capacity below bookings before saving', async () => {
+  await withStub(DeliverySlot, 'findById', async () => ({ booked: 8 }), async () => {
+    await assert.rejects(() => updateSlot('slot-1', { capacity: 7 }), { code: 'SLOT_CAPACITY_CONFLICT' });
   });
 });
 

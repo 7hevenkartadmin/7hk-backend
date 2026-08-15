@@ -11,6 +11,7 @@ import { adminRoutes } from './modules/admin/admin.routes.js';
 import { addressRoutes } from './modules/addresses/address.routes.js';
 import { realtimeRoutes } from './modules/realtime/realtime.routes.js';
 import { settingsRoutes } from './modules/settings/settings.routes.js';
+import { whatsappWebhookRoutes } from './modules/auth/whatsapp.webhook.js';
 
 export const routes = Router();
 
@@ -26,3 +27,4 @@ routes.use('/admin', adminRoutes);
 routes.use('/addresses', addressRoutes);
 routes.use('/realtime', realtimeRoutes);
 routes.use('/settings', settingsRoutes);
+routes.use('/webhooks/whatsapp', whatsappWebhookRoutes);

@@ -11,3 +11,9 @@ export const deliverySlotSchema = z.object({
   message: 'End time must be after start time',
   path: ['endsAt'],
 });
+
+export const deliverySlotUpdateSchema = z.object({
+  capacity: z.number().int().positive().optional(),
+  serviceArea: z.string().min(2).max(80).optional(),
+  isActive: z.boolean().optional(),
+}).refine((data) => Object.keys(data).length > 0, { message: 'At least one slot field is required' });
