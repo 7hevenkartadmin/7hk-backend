@@ -52,7 +52,8 @@ const orderSchema = new mongoose.Schema({
   tax: { type: Number, min: 0, default: 0 },
   total: { type: Number, min: 0, required: true },
   paymentMethod: { type: String, enum: ['razorpay', 'cod'], required: true },
-  paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'pending' },
+  paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'partially_refunded', 'refunded'], default: 'pending' },
+  paymentIntent: { type: mongoose.Schema.Types.ObjectId, ref: 'PaymentIntent' },
   status: { type: String, enum: ORDER_STATUSES, default: 'placed', index: true },
   statusTimeline: [{
     status: { type: String, enum: ORDER_STATUSES },
@@ -69,11 +70,16 @@ const orderSchema = new mongoose.Schema({
     name: String,
     phone: String,
   },
+  inventoryRestoredAt: Date,
 }, { timestamps: true });
 
 orderSchema.index({ createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1, createdAt: -1 });
+orderSchema.index(
+  { paymentIntent: 1 },
+  { name: 'order_payment_intent_unique', unique: true, partialFilterExpression: { paymentIntent: { $type: 'objectId' } } },
+);
 orderSchema.index({ 'customerSnapshot.name': 1 });
 orderSchema.index({ 'customerSnapshot.phone': 1 });
 orderSchema.index({ 'address.phone': 1 });

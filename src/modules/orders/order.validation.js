@@ -5,9 +5,13 @@ const itemSchema = z.object({
   variantId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
   quantity: z.number().int().positive().max(99),
 });
+const itemsSchema = z.array(itemSchema).min(1).refine(
+  (items) => new Set(items.map((item) => item.productId + ':' + (item.variantId || ''))).size === items.length,
+  'Duplicate cart items are not allowed',
+);
 
 export const quoteOrderSchema = z.object({
-  items: z.array(itemSchema).min(1),
+  items: itemsSchema,
   couponCode: z.string().max(40).optional(),
   addressId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
 });
@@ -36,11 +40,13 @@ export const createOrderSchema = quoteOrderSchema.extend({
   }).optional(),
   slotId: z.string().min(12),
   paymentMethod: z.enum(['razorpay', 'cod']),
+  paymentSessionId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
   razorpayPayment: razorpayPaymentSchema.optional(),
   codTermsAccepted: z.boolean().optional().default(false),
 })
   .refine((data) => data.addressId || data.address, { message: 'addressId or address is required' })
-  .refine((data) => data.paymentMethod !== 'razorpay' || data.razorpayPayment, { message: 'razorpayPayment is required for online payment' });
+  .refine((data) => data.paymentMethod !== 'razorpay' || data.addressId, { message: 'A saved addressId is required for online payment' })
+  .refine((data) => data.paymentMethod !== 'razorpay' || data.paymentSessionId, { message: 'paymentSessionId is required for online payment' });
 
 export const updateStatusSchema = z.object({
   status: z.enum(['placed', 'confirmed', 'packed', 'out_for_delivery', 'delivered', 'cancelled']),

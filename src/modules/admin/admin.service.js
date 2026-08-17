@@ -70,7 +70,7 @@ function revenueDateFormat(period) {
 export async function getDashboardStats(period = 'weekly') {
   const today = todayStoreRange();
   const activeFilter = { isActive: true };
-  const lowStockFilter = { ...activeFilter, stock: { $lt: env.LOW_STOCK_THRESHOLD } };
+  const lowStockFilter = { ...activeFilter, availableStock: { $gt: 0, $lt: env.LOW_STOCK_THRESHOLD } };
   const revenueStart = revenuePeriodStart(period);
   const periodRevenueFilter = { ...REVENUE_FILTER, createdAt: { $gte: revenueStart } };
   const [
@@ -88,10 +88,19 @@ export async function getDashboardStats(period = 'weekly') {
     Order.aggregate([{ $match: { ...REVENUE_FILTER, createdAt: { $gte: today.start, $lt: today.end } } }, { $group: { _id: null, value: { $sum: '$total' } } }]),
     Product.countDocuments(),
     Product.countDocuments(activeFilter),
-    Product.countDocuments({ ...activeFilter, stock: 0 }),
+    Product.countDocuments({ ...activeFilter, availableStock: 0 }),
     Product.countDocuments(lowStockFilter),
     Order.find().sort({ createdAt: -1 }).limit(5).lean(),
-    Product.find(lowStockFilter).sort({ stock: 1, name: 1 }).limit(8).select('name stock unit image').lean(),
+    Product.aggregate([
+      { $match: activeFilter },
+      { $unwind: '$variants' },
+      { $match: { 'variants.isActive': true } },
+      { $addFields: { skuAvailable: { $max: [0, { $subtract: ['$variants.stock', { $ifNull: ['$variants.reservedStock', 0] }] }] } } },
+      { $match: { skuAvailable: { $lt: env.LOW_STOCK_THRESHOLD } } },
+      { $sort: { skuAvailable: 1, name: 1 } },
+      { $limit: 8 },
+      { $project: { name: 1, image: 1, stock: '$skuAvailable', unit: '$variants.unit', sku: '$variants.sku', variantId: '$variants._id' } },
+    ]),
     Order.aggregate([
       { $match: periodRevenueFilter },
       { $group: { _id: { $dateToString: { format: revenueDateFormat(period), date: '$createdAt', timezone: 'Asia/Kolkata' } }, revenue: { $sum: '$total' }, orders: { $sum: 1 } } },

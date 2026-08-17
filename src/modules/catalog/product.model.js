@@ -20,6 +20,10 @@ const variantSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
 }, { timestamps: false });
 
+variantSchema.path('reservedStock').validate(function reservedDoesNotExceedStock(value) {
+  return Number(value || 0) <= Number(this.stock || 0);
+}, 'Reserved stock cannot exceed on-hand stock');
+
 const productSchema = new mongoose.Schema({
   name: { type: String, trim: true, required: true, index: 'text' },
   slug: { type: String, trim: true, unique: true, index: true, required: true },
@@ -38,6 +42,8 @@ const productSchema = new mongoose.Schema({
   ratingCount: { type: Number, min: 0, default: 0 },
   stock: { type: Number, min: 0, default: 0, index: true },
   reservedStock: { type: Number, min: 0, default: 0 },
+  totalStock: { type: Number, min: 0, default: 0, index: true },
+  availableStock: { type: Number, min: 0, default: 0, index: true },
   sku: { type: String, trim: true, unique: true, required: true },
   barcode: barcodeSchema,
   variants: { type: [variantSchema], default: [] },
@@ -55,7 +61,21 @@ const productSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 productSchema.pre('validate', function syncDefaultVariant() {
-  if (!this.variants?.length) return;
+  if (!this.variants?.length) {
+    this.variants = [{
+      title: this.unit || 'Default',
+      unit: this.unit,
+      sku: this.sku,
+      barcode: this.barcode,
+      mrp: this.mrp,
+      price: this.price,
+      stock: this.stock,
+      reservedStock: this.reservedStock,
+      images: this.image ? [this.image] : [],
+      isDefault: true,
+      isActive: this.isActive !== false,
+    }];
+  }
   const selected = this.variants.find((variant) => variant.isDefault && variant.isActive)
     || this.variants.find((variant) => variant.isActive)
     || this.variants[0];
@@ -67,9 +87,19 @@ productSchema.pre('validate', function syncDefaultVariant() {
   this.stock = selected.stock;
   this.reservedStock = selected.reservedStock;
   this.barcode = selected.barcode;
+  const activeVariants = this.variants.filter((variant) => variant.isActive);
+  this.totalStock = activeVariants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0);
+  this.availableStock = activeVariants.reduce(
+    (sum, variant) => sum + Math.max(0, Number(variant.stock || 0) - Number(variant.reservedStock || 0)),
+    0,
+  );
   this.discount = selected.mrp > 0 ? Math.round(((selected.mrp - selected.price) / selected.mrp) * 100) : 0;
   if (!this.image && selected.images?.length) this.image = selected.images[0];
 });
+
+productSchema.path('reservedStock').validate(function reservedDoesNotExceedStock(value) {
+  return Number(value || 0) <= Number(this.stock || 0);
+}, 'Reserved stock cannot exceed on-hand stock');
 
 productSchema.path('price').validate(function priceDoesNotExceedMrp(value) {
   return value <= this.mrp;

@@ -1,30 +1,26 @@
-import fs from 'fs';
-import path from 'path';
-import { randomUUID } from 'crypto';
 import multer from 'multer';
+import { env } from '../../config/env.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
-export const catalogUploadRoot = path.resolve('uploads', 'catalog');
-fs.mkdirSync(catalogUploadRoot, { recursive: true });
+const allowedImageTypes = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif']);
+const maxImageBytes = env.CLOUDINARY_MAX_IMAGE_MB * 1024 * 1024;
 
-const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
-const extensionByMime = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
-  'image/avif': '.avif',
-};
-
-const storage = multer.diskStorage({
-  destination: catalogUploadRoot,
-  filename(_req, file, callback) {
-    callback(null, `${Date.now()}-${randomUUID()}${extensionByMime[file.mimetype]}`);
-  },
-});
+function hasValidSignature(file) {
+  const bytes = file.buffer;
+  if (!bytes || bytes.length < 12) return false;
+  if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/jpg') return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (file.mimetype === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (file.mimetype === 'image/webp') return bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP';
+  if (file.mimetype === 'image/avif') {
+    const header = bytes.toString('ascii', 4, Math.min(bytes.length, 32));
+    return header.startsWith('ftyp') && /avif|avis/.test(header);
+  }
+  return false;
+}
 
 const uploadSingleImage = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: maxImageBytes, files: 1, fields: 2 },
   fileFilter(_req, file, callback) {
     if (!allowedImageTypes.has(file.mimetype)) {
       callback(new AppError('Upload a JPG, PNG, WebP or AVIF image', 422, 'INVALID_IMAGE_TYPE'));
@@ -36,14 +32,19 @@ const uploadSingleImage = multer({
 
 export function catalogImageUpload(req, res, next) {
   uploadSingleImage(req, res, (error) => {
-    if (!error) return next();
     if (error instanceof multer.MulterError) {
       return next(new AppError(
-        error.code === 'LIMIT_FILE_SIZE' ? 'Image must be 5 MB or smaller' : 'Invalid image upload',
+        error.code === 'LIMIT_FILE_SIZE'
+          ? `Image must be ${env.CLOUDINARY_MAX_IMAGE_MB} MB or smaller`
+          : 'Invalid image upload',
         422,
         'INVALID_IMAGE_UPLOAD',
       ));
     }
-    return next(error);
+    if (error) return next(error);
+    if (req.file && !hasValidSignature(req.file)) {
+      return next(new AppError('Image content does not match its file type', 422, 'INVALID_IMAGE_CONTENT'));
+    }
+    return next();
   });
 }

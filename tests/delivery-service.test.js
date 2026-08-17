@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DeliverySlot } from '../src/modules/delivery/deliverySlot.model.js';
+import { StoreSettings } from '../src/modules/settings/storeSettings.model.js';
+import { storeDateKey } from '../src/shared/utils/storeDate.js';
 import { createSlot, listAdminSlots, listAvailableSlots, reserveSlot, updateSlot } from '../src/modules/delivery/delivery.service.js';
 
 function withStub(object, method, implementation, callback) {
@@ -17,11 +19,12 @@ test('reserveSlot atomically increments only active slots with remaining capacit
   const expectedSlot = { _id: 'slot-1', booked: 4, capacity: 50 };
 
   await withStub(DeliverySlot, 'findOneAndUpdate', async (filter, update, options) => {
-    assert.deepEqual(filter, {
-      _id: 'slot-1',
-      isActive: true,
-      $expr: { $lt: ['$booked', '$capacity'] },
-    });
+    assert.equal(filter._id, 'slot-1');
+    assert.equal(filter.isActive, true);
+    assert.ok(filter.date.$gte instanceof Date);
+    assert.ok(filter.date.$lt instanceof Date);
+    assert.equal(typeof filter.endsAt.$gt, 'string');
+    assert.deepEqual(filter.$expr, { $lt: ['$booked', '$capacity'] });
     assert.deepEqual(update, { $inc: { booked: 1 } });
     assert.equal(options.new, true);
     assert.equal(options.session, 'session');
@@ -85,7 +88,8 @@ test('updateSlot rejects capacity below bookings before saving', async () => {
   });
 });
 
-test('listAvailableSlots creates upcoming defaults and filters by area and date', async () => {
+test('listAvailableSlots creates same-day defaults and filters by area and date', async () => {
+  const at = new Date('2026-08-18T06:30:00.000Z');
   const calls = [];
   const queryChain = {
     sort(sort) {
@@ -94,13 +98,13 @@ test('listAvailableSlots creates upcoming defaults and filters by area and date'
     },
   };
 
-  await withStub(DeliverySlot, 'bulkWrite', async (operations, options) => {
+  await withStub(StoreSettings, 'findOneAndUpdate', async () => ({}), async () => withStub(DeliverySlot, 'bulkWrite', async (operations, options) => {
     calls.push(['bulkWrite', operations, options]);
   }, async () => withStub(DeliverySlot, 'find', (filter) => {
     calls.push(['find', filter]);
     return queryChain;
   }, async () => {
-    const slots = await listAvailableSlots({ serviceArea: 'Patna', date: '2026-07-01' });
+    const slots = await listAvailableSlots({ serviceArea: 'Patna', date: storeDateKey(at) }, { at });
 
     assert.deepEqual(slots, [{ _id: 'slot-1' }]);
     assert.equal(calls[0][0], 'bulkWrite');
@@ -112,5 +116,5 @@ test('listAvailableSlots creates upcoming defaults and filters by area and date'
     assert.ok(calls[1][1].date.$gte instanceof Date);
     assert.ok(calls[1][1].date.$lt instanceof Date);
     assert.deepEqual(calls[2], ['sort', { date: 1, startsAt: 1 }]);
-  }));
+  })));
 });

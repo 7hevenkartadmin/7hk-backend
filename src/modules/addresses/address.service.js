@@ -2,13 +2,7 @@ import { env } from '../../config/env.js';
 import { distanceInKm } from '../../shared/utils/distance.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { Address } from './address.model.js';
-
-function getDeliveryZone(distanceKm) {
-  if (distanceKm <= 4) return { deliveryZone: 'A', deliveryCharge: 20 };
-  if (distanceKm <= 8) return { deliveryZone: 'B', deliveryCharge: 35 };
-  if (distanceKm <= env.DELIVERY_RADIUS_KM) return { deliveryZone: 'C', deliveryCharge: 50 };
-  throw new AppError(`Delivery address is ${distanceKm.toFixed(1)} km away. Service is available within ${env.DELIVERY_RADIUS_KM} km.`, 422, 'OUT_OF_DELIVERY_RADIUS');
-}
+import { deliveryZoneForDistance } from '../settings/settings.service.js';
 
 export async function createAddress(user, payload) {
   const latitude = payload.lat ?? payload.latitude;
@@ -17,7 +11,11 @@ export async function createAddress(user, payload) {
     { latitude: env.STORE_LATITUDE, longitude: env.STORE_LONGITUDE },
     { latitude, longitude },
   ).toFixed(2));
-  const delivery = getDeliveryZone(distanceFromStoreKm);
+  const zone = await deliveryZoneForDistance(distanceFromStoreKm);
+  if (!zone || distanceFromStoreKm > env.DELIVERY_RADIUS_KM) {
+    throw new AppError(`Delivery address is ${distanceFromStoreKm.toFixed(1)} km away. Service is unavailable for this location.`, 422, 'OUT_OF_DELIVERY_RADIUS');
+  }
+  const delivery = { deliveryZone: zone.code, deliveryCharge: zone.charge };
 
   const address = await Address.create({
     userId: user.id,

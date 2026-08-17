@@ -14,6 +14,7 @@ const envSchema = z.object({
   COOKIE_SECURE: z.coerce.boolean().default(false),
   RAZORPAY_KEY_ID: z.string().optional().default(''),
   RAZORPAY_KEY_SECRET: z.string().optional().default(''),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional().default(''),
   REDIS_URL: z.string().url().default('redis://127.0.0.1:6379'),
   OTP_HMAC_SECRET: z.string().min(32).optional(),
   OTP_QUEUE_NAME: z.string().min(1).default('otp-notifications'),
@@ -27,6 +28,11 @@ const envSchema = z.object({
   META_GRAPH_API_BASE_URL: z.string().url().default('https://graph.facebook.com'),
   META_WHATSAPP_APP_SECRET: z.string().optional().default(''),
   META_WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional().default(''),
+  CLOUDINARY_CLOUD_NAME: z.string().trim().optional().default(''),
+  CLOUDINARY_API_KEY: z.string().trim().optional().default(''),
+  CLOUDINARY_API_SECRET: z.string().trim().optional().default(''),
+  CLOUDINARY_FOLDER: z.string().trim().regex(/^[a-zA-Z0-9/_-]+$/).default('7heven/catalog'),
+  CLOUDINARY_MAX_IMAGE_MB: z.coerce.number().int().min(1).max(3).default(3),
   LOW_STOCK_THRESHOLD: z.coerce.number().int().positive().default(20),
   STORE_LATITUDE: z.coerce.number().default(26.713052497465416),
   STORE_LONGITUDE: z.coerce.number().default(85.68640273918543),
@@ -80,6 +86,17 @@ const envSchema = z.object({
       message: 'Access and refresh JWT secrets must be different',
     });
   }
+  if (data.NODE_ENV === 'production') {
+    [
+      ['RAZORPAY_KEY_ID', data.RAZORPAY_KEY_ID, 8],
+      ['RAZORPAY_KEY_SECRET', data.RAZORPAY_KEY_SECRET, 16],
+      ['RAZORPAY_WEBHOOK_SECRET', data.RAZORPAY_WEBHOOK_SECRET, 16],
+    ].forEach(([field, value, minLength]) => {
+      if (!value || value.length < minLength || placeholderSecret(value)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `${field} must be configured for production payments` });
+      }
+    });
+  }
   if (data.NODE_ENV === 'production' && data.WHATSAPP_PROVIDER !== 'meta') {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -92,6 +109,17 @@ const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ['OTP_WORKER_ENABLED'],
       message: 'The OTP delivery worker is required in production',
+    });
+  }
+  if (data.NODE_ENV === 'production') {
+    [
+      ['CLOUDINARY_CLOUD_NAME', data.CLOUDINARY_CLOUD_NAME],
+      ['CLOUDINARY_API_KEY', data.CLOUDINARY_API_KEY],
+      ['CLOUDINARY_API_SECRET', data.CLOUDINARY_API_SECRET],
+    ].forEach(([field, value]) => {
+      if (!value || placeholderSecret(value)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `${field} is required in production` });
+      }
     });
   }
   const requiredMetaFields = [

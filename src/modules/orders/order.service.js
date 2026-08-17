@@ -4,7 +4,7 @@ import { Product } from '../catalog/product.model.js';
 import { Coupon } from '../coupons/coupon.model.js';
 import { validateCoupon } from '../coupons/coupon.service.js';
 import { reserveSlot } from '../delivery/delivery.service.js';
-import { consumeRazorpayPaymentIntent, createCapturedRazorpayPaymentForOrder, createPaymentForOrder, verifyRazorpaySignature } from '../payments/payment.service.js';
+import { completeRazorpayPaymentIntent, consumeRazorpayPaymentIntent, createCapturedRazorpayPaymentForOrder, createPaymentForOrder, getVerifiedPaymentIntentForOrder, refundUnfulfillablePayment } from '../payments/payment.service.js';
 import { sendOrderPlacedNotification, sendOrderStatusNotification } from '../notifications/notification.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { publishInventoryChange } from '../../shared/realtime/inventory.events.js';
@@ -15,6 +15,8 @@ import { calculateCartTotals, defaultDeliveryFee } from './pricing.service.js';
 import { distanceInKm } from '../../shared/utils/distance.js';
 import { env } from '../../config/env.js';
 import { deliveryFeeForDistance, getCodSettings } from '../settings/settings.service.js';
+import { assertStoreAcceptingOrders, getStoreAvailability } from '../settings/storeAvailability.service.js';
+import { PaymentIntent } from '../payments/paymentIntent.model.js';
 import { deliveryOtpForOrder, matchesDeliveryOtp } from './delivery-otp.service.js';
 
 const orderId = customAlphabet('123456789ABCDEFGHJKLMNPQRSTUVWXYZ', 8);
@@ -79,12 +81,40 @@ async function hydrateItems(inputItems, session) {
   });
 }
 
+function applyCheckoutSnapshot(items, snapshot) {
+  if (!snapshot?.items || snapshot.items.length !== items.length) {
+    throw new AppError('Cart does not match the captured payment', 409, 'PAYMENT_INTENT_MISMATCH');
+  }
+  const snapshotByItem = new Map(snapshot.items.map((item) => [
+    item.productId + ':' + (item.variantId || ''),
+    item,
+  ]));
+  return items.map((item) => {
+    const key = String(item.product._id) + ':' + String(item.variant?._id || '');
+    const paidItem = snapshotByItem.get(key);
+    if (!paidItem || Number(paidItem.quantity) !== Number(item.quantity)) {
+      throw new AppError('Cart does not match the captured payment', 409, 'PAYMENT_INTENT_MISMATCH');
+    }
+    return {
+      ...item,
+      price: paidItem.price,
+      mrp: paidItem.mrp,
+      taxRate: paidItem.taxRate,
+      name: paidItem.name,
+      sku: paidItem.sku,
+      unit: paidItem.unit,
+      image: paidItem.image,
+    };
+  });
+}
+
 export async function quoteOrder(customer, payload) {
   const items = await hydrateItems(payload.items);
   const subtotalOnly = calculateCartTotals({ items }).subtotal;
   const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly);
   const selectedAddress = payload.addressId ? customer.addresses.id(payload.addressId) : null;
   if (payload.addressId && !selectedAddress) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
+  await assertStoreAcceptingOrders({ distanceKm: selectedAddress?.distanceFromStoreKm });
   const deliveryFee = selectedAddress
     ? (subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(selectedAddress.distanceFromStoreKm, defaultDeliveryFee(subtotalOnly)))
     : defaultDeliveryFee(subtotalOnly);
@@ -97,6 +127,10 @@ export async function quoteOrder(customer, payload) {
 }
 
 export async function createOrder(customer, payload) {
+  if (payload.paymentMethod === 'razorpay' && payload.paymentSessionId) {
+    const existingOrder = await Order.findOne({ customer: customer._id, paymentIntent: payload.paymentSessionId });
+    if (existingOrder) return { order: existingOrder, payment: null };
+  }
   const session = await mongoose.startSession();
   let result;
   try {
@@ -105,7 +139,19 @@ export async function createOrder(customer, payload) {
     });
   } catch (error) {
     if (error?.code !== 20 && !String(error?.message || '').includes('Transaction numbers are only allowed')) {
+      if (payload.paymentMethod === 'razorpay'
+        && ['PRODUCT_NOT_FOUND', 'VARIANT_UNAVAILABLE', 'INSUFFICIENT_STOCK', 'ADDRESS_NOT_FOUND', 'OUT_OF_DELIVERY_RADIUS'].includes(error?.code)) {
+        await refundUnfulfillablePayment(payload.paymentSessionId, customer, error.code, {
+          items: payload.items,
+          couponCode: payload.couponCode,
+          addressId: payload.addressId,
+        });
+        throw new AppError('An item became unavailable after payment. A full refund has been initiated.', 409, 'PAYMENT_REFUND_INITIATED');
+      }
       throw error;
+    }
+    if (env.NODE_ENV === 'production') {
+      throw new AppError('Order database transactions are unavailable', 503, 'ORDER_TRANSACTION_UNAVAILABLE');
     }
     result = await performCreateOrder(customer, payload);
   } finally {
@@ -127,23 +173,50 @@ export async function createOrder(customer, payload) {
 
 async function performCreateOrder(customer, payload, session) {
     const inventoryChanges = [];
-    if (payload.paymentMethod === 'razorpay') verifyRazorpaySignature(payload.razorpayPayment);
-    const items = await hydrateItems(payload.items, session);
-    const subtotalOnly = calculateCartTotals({ items }).subtotal;
-    const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly);
-    const address = payload.address || customer.addresses.id(payload.addressId);
+    let items = await hydrateItems(payload.items, session);
+    let coupon;
+    let couponCode = payload.couponCode;
+    let totals;
+    let couponDiscount = 0;
+    let subtotalOnly = 0;
+    if (payload.paymentMethod === 'razorpay') {
+      const preview = await getVerifiedPaymentIntentForOrder(payload.paymentSessionId, customer, session);
+      items = applyCheckoutSnapshot(items, preview.checkoutSnapshot);
+      totals = preview.checkoutSnapshot.totals;
+      couponCode = preview.checkoutSnapshot.couponCode || undefined;
+      if (couponCode) {
+        const couponQuery = Coupon.findOne({ code: couponCode });
+        if (session) couponQuery.session(session);
+        coupon = await couponQuery;
+      }
+    } else {
+      subtotalOnly = calculateCartTotals({ items }).subtotal;
+      const validatedCoupon = await validateCoupon(payload.couponCode, subtotalOnly);
+      coupon = validatedCoupon.coupon;
+      couponDiscount = validatedCoupon.discount;
+    }
+    const address = payload.paymentMethod === 'razorpay'
+      ? customer.addresses.id(payload.addressId)
+      : payload.address || customer.addresses.id(payload.addressId);
     if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
     const deliveryAddress = enforceDeliveryRadius(typeof address.toObject === 'function' ? address.toObject() : address);
-    const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(deliveryAddress.distanceFromStoreKm, defaultDeliveryFee(subtotalOnly));
-    const totals = calculateCartTotals({ items, couponDiscount: discount, deliveryFee });
+    if (payload.paymentMethod === 'cod') {
+      const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(
+        deliveryAddress.distanceFromStoreKm,
+        defaultDeliveryFee(subtotalOnly),
+      );
+      totals = calculateCartTotals({ items, couponDiscount, deliveryFee });
+    }
+    await assertOrderAvailability(customer, payload, deliveryAddress.distanceFromStoreKm, session);
     if (payload.paymentMethod === 'cod') await validateCodEligibility(customer, payload, totals);
     const slot = await reserveSlot(payload.slotId, session);
+    let paymentIntent;
     if (payload.paymentMethod === 'razorpay') {
-      await consumeRazorpayPaymentIntent({
+      paymentIntent = await consumeRazorpayPaymentIntent({
         customer,
-        payload: payload.razorpayPayment,
+        paymentSessionId: payload.paymentSessionId,
         items: payload.items,
-        couponCode: payload.couponCode,
+        couponCode,
         total: totals.total,
         addressId: payload.addressId,
         session,
@@ -177,23 +250,45 @@ async function performCreateOrder(customer, payload, session) {
       items: items.map(({ product, variant, quantity, price, mrp, taxRate, name, sku, unit, image }) => ({ product: product._id, variantId: variant?._id, quantity, price, mrp, taxRate, name, sku, unit, image, category: product.category })),
       address: deliveryAddress,
       slot: { slotId: slot._id, date: slot.date, startsAt: slot.startsAt, endsAt: slot.endsAt },
-      couponCode: coupon?.code,
+      couponCode: couponCode || coupon?.code,
       ...totals,
       paymentMethod: payload.paymentMethod,
       paymentStatus: payload.paymentMethod === 'cod' ? 'pending' : 'pending',
+      paymentIntent: paymentIntent?._id,
       statusTimeline: [{ status: 'placed', note: 'Order placed', actor: customer._id }],
     }], { session });
 
     order.invoice = buildInvoice(order);
     await order.save({ session });
     if (payload.paymentMethod === 'razorpay') {
-      await createCapturedRazorpayPaymentForOrder(order, payload.razorpayPayment, session);
+      await createCapturedRazorpayPaymentForOrder(order, paymentIntent, session);
       order.paymentStatus = 'paid';
       await order.save({ session });
+      await completeRazorpayPaymentIntent(paymentIntent._id, order._id, session);
     } else {
       await createPaymentForOrder(order, session);
     }
     return { order, payment: null, inventoryChanges };
+}
+
+async function assertOrderAvailability(customer, payload, distanceKm, session) {
+  const availability = await getStoreAvailability({ distanceKm });
+  if (availability.acceptingOrders) return availability;
+
+  // A short grace window prevents a customer who entered Razorpay while open from
+  // being charged and then rejected if a cutoff is crossed during payment.
+  if (payload.paymentMethod === 'razorpay' && payload.paymentSessionId) {
+    const query = PaymentIntent.findOne({
+      _id: payload.paymentSessionId,
+      user: customer._id,
+      status: { $in: ['verified', 'processing', 'consumed'] },
+    }).select('createdAt');
+    if (session) query.session(session);
+    const intent = await query;
+    if (intent) return { acceptingOrders: true, reasonCode: 'CAPTURED_PAYMENT_GRACE' };
+  }
+
+  throw new AppError(availability.message, 409, availability.reasonCode, { availability });
 }
 
 async function validateCodEligibility(customer, payload, totals) {

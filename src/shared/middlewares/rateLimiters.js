@@ -24,3 +24,12 @@ export const deliveryOtpRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: 'Too many delivery OTP attempts. Please wait before retrying.', code: 'DELIVERY_OTP_RATE_LIMITED' },
 });
+
+export const paymentRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  limit: 20,
+  keyGenerator: (req) => String(req.user?._id || 'anonymous'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many payment requests. Please wait before retrying.', code: 'PAYMENT_RATE_LIMITED' },
+});

@@ -27,6 +27,24 @@ function defaultVariantIndex(variants = []) {
   return active >= 0 ? active : 0;
 }
 
+export function inventorySummary(product) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const active = variants.filter((variant) => variant.isActive !== false);
+  if (active.length === 0) {
+    const onHand = Number(product?.stock || 0);
+    const reserved = Number(product?.reservedStock || 0);
+    return { totalStock: onHand, reservedStock: reserved, availableStock: Math.max(0, onHand - reserved) };
+  }
+  return active.reduce((summary, variant) => {
+    const onHand = Number(variant.stock || 0);
+    const reserved = Number(variant.reservedStock || 0);
+    summary.totalStock += onHand;
+    summary.reservedStock += reserved;
+    summary.availableStock += Math.max(0, onHand - reserved);
+    return summary;
+  }, { totalStock: 0, reservedStock: 0, availableStock: 0 });
+}
+
 async function resolveCategoryHierarchy(payload, existingProduct = null) {
   const hasCategoryRef = Object.hasOwn(payload, 'categoryRef');
   const hasSubcategoryRef = Object.hasOwn(payload, 'subcategoryRef');
@@ -78,11 +96,20 @@ async function validateCategoryParent(categoryId, parentId) {
 
 export function toPublicProduct(product) {
   const item = typeof product?.toObject === 'function' ? product.toObject() : { ...product };
-  item.isAvailable = Number(item.stock || 0) > 0;
+  const summary = inventorySummary(item);
+  const defaultVariant = item.variants?.find((variant) => variant.isDefault && variant.isActive !== false)
+    || item.variants?.find((variant) => variant.isActive !== false);
+  item.isAvailable = summary.availableStock > 0;
+  item.defaultVariantId = defaultVariant?._id;
+  item.defaultVariantAvailable = defaultVariant
+    ? Number(defaultVariant.stock || 0) - Number(defaultVariant.reservedStock || 0) > 0
+    : summary.availableStock > 0;
   delete item.stock;
   delete item.reservedStock;
+  delete item.totalStock;
+  delete item.availableStock;
   item.variants = Array.isArray(item.variants) ? item.variants.map((variant) => {
-    const publicVariant = { ...variant, isAvailable: Number(variant.stock || 0) > 0 };
+    const publicVariant = { ...variant, isAvailable: Number(variant.stock || 0) - Number(variant.reservedStock || 0) > 0 };
     delete publicVariant.stock;
     delete publicVariant.reservedStock;
     return publicVariant;
@@ -149,8 +176,8 @@ export async function listProducts(query, options = {}) {
   if (query.featured !== undefined) filter.isFeatured = query.featured;
   if (query.active === 'active') filter.isActive = true;
   if (query.active === 'inactive') filter.isActive = false;
-  if (query.stockStatus === 'out') filter.stock = 0;
-  if (query.stockStatus === 'low') filter.stock = { $gt: 0, $lt: env.LOW_STOCK_THRESHOLD };
+  if (query.stockStatus === 'out') filter.availableStock = 0;
+  if (query.stockStatus === 'low') filter.availableStock = { $gt: 0, $lt: env.LOW_STOCK_THRESHOLD };
   if (query.minPrice !== undefined || query.maxPrice !== undefined) {
     filter.price = {};
     if (query.minPrice !== undefined) filter.price.$gte = query.minPrice;
@@ -180,7 +207,13 @@ export async function listProducts(query, options = {}) {
       { path: 'subcategoryRef', select: 'name slug parent' },
     ])
     : rawItems;
-  return paged(options.exposeInventory ? items : items.map(toPublicProduct), total, page, limit);
+  const responseItems = options.exposeInventory
+    ? items.map((product) => {
+      const item = typeof product?.toObject === 'function' ? product.toObject() : { ...product };
+      return { ...item, ...inventorySummary(item) };
+    })
+    : items.map(toPublicProduct);
+  return paged(responseItems, total, page, limit);
 }
 
 export async function listHomepageShelves(limit = 15) {
@@ -283,6 +316,13 @@ export async function updateProduct(id, payload) {
   if (update.name) update.slug = slugify(update.name, { lower: true, strict: true });
 
   const variantsWereReplaced = Object.hasOwn(update, 'variants');
+  if (variantsWereReplaced && product.variants?.length) {
+    const incomingIds = new Set(update.variants.map((variant) => String(variant._id || '')).filter(Boolean));
+    const retiredVariants = product.variants
+      .filter((variant) => !incomingIds.has(String(variant._id)))
+      .map((variant) => ({ ...variant.toObject(), isDefault: false, isActive: false }));
+    update.variants = [...update.variants, ...retiredVariants];
+  }
   if (!variantsWereReplaced && product.variants?.length) {
     const selected = product.variants[defaultVariantIndex(product.variants)];
     const mirroredFields = ['sku', 'unit', 'mrp', 'price', 'stock', 'reservedStock', 'barcode'];

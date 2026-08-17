@@ -4,11 +4,11 @@ import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { validate } from '../../shared/validation/validate.js';
 import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { createSlot, listAdminSlots, listAvailableSlots, updateSlot } from './delivery.service.js';
-import { deliverySlotSchema, deliverySlotUpdateSchema } from './delivery.validation.js';
+import { deliverySlotSchema, deliverySlotsQuerySchema, deliverySlotUpdateSchema } from './delivery.validation.js';
 
 export const deliveryRoutes = Router();
 
-deliveryRoutes.get('/', asyncHandler(async (req, res) => {
+deliveryRoutes.get('/', validate(deliverySlotsQuerySchema, 'query'), asyncHandler(async (req, res) => {
   ok(res, { slots: await listAvailableSlots(req.query) }, 'Delivery slots loaded');
 }));
 

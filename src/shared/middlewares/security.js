@@ -23,7 +23,9 @@ export function applySecurity(app) {
   app.use(express.json({
     limit: '1mb',
     verify(req, _res, buffer) {
-      if (req.originalUrl.includes('/webhooks/whatsapp')) req.rawBody = Buffer.from(buffer);
+      if (req.originalUrl.includes('/webhooks/whatsapp') || req.originalUrl.includes('/webhooks/razorpay')) {
+        req.rawBody = Buffer.from(buffer);
+      }
     },
   }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));

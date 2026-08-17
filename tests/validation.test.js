@@ -6,6 +6,7 @@ import { createOrderSchema, quoteOrderSchema, updateStatusSchema } from '../src/
 import { storeSettingsSchema } from '../src/modules/settings/settings.validation.js';
 import { addressSchema } from '../src/modules/users/user.validation.js';
 import { canTransitionOrderStatus } from '../src/modules/orders/order.service.js';
+import { defaultOrderingSchedule } from '../src/modules/settings/settings.defaults.js';
 
 const productId = '507f1f77bcf86cd799439011';
 
@@ -26,7 +27,7 @@ test('order quote validation rejects invalid product ids and unsafe quantities',
   assert.equal(quoteOrderSchema.safeParse({ items: [{ productId, variantId: 'bad-variant', quantity: 2 }] }).success, false);
 });
 
-test('order creation requires address or addressId and Razorpay proof for online payment', () => {
+test('order creation requires a saved address and payment session for online payment', () => {
   const baseOrder = {
     items: [{ productId, quantity: 1 }],
     slotId: '507f1f77bcf86cd799439012',
@@ -40,11 +41,7 @@ test('order creation requires address or addressId and Razorpay proof for online
     ...baseOrder,
     addressId: '507f1f77bcf86cd799439013',
     paymentMethod: 'razorpay',
-    razorpayPayment: {
-      razorpay_order_id: 'order_123',
-      razorpay_payment_id: 'pay_123',
-      razorpay_signature: 'validsignature',
-    },
+    paymentSessionId: '507f1f77bcf86cd799439014',
   }).success, true);
 });
 
@@ -123,6 +120,20 @@ test('store settings validation accepts COD fraud controls and rejects unsafe va
       maxCancelledOrdersInWindow: 2,
       cancellationWindowDays: 30,
       terms: 'Too short',
+    },
+  }).success, false);
+
+  assert.equal(storeSettingsSchema.safeParse({
+    deliveryZones: [
+      { code: 'a', label: 'Zone A', limit: 4, charge: 20, orderCutoff: '20:00', isActive: true },
+      { code: 'A', label: 'Zone Again', limit: 8, charge: 35, orderCutoff: '19:00', isActive: true },
+    ],
+  }).success, false);
+
+  assert.equal(storeSettingsSchema.safeParse({
+    orderingSchedule: {
+      ...defaultOrderingSchedule,
+      specialDates: [{ date: '2026-02-30', isOpen: false, opensAt: '09:00', closesAt: '20:00', reason: 'Invalid day' }],
     },
   }).success, false);
 });

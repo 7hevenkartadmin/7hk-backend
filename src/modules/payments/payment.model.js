@@ -8,8 +8,18 @@ const paymentSchema = new mongoose.Schema({
   providerSignature: String,
   amount: { type: Number, min: 0, required: true },
   currency: { type: String, default: 'INR' },
-  status: { type: String, enum: ['created', 'authorized', 'captured', 'failed'], default: 'created' },
+  status: { type: String, enum: ['created', 'authorized', 'captured', 'failed', 'refunded', 'partially_refunded'], default: 'created' },
+  amountRefunded: { type: Number, min: 0, default: 0 },
   raw: mongoose.Schema.Types.Mixed,
 }, { timestamps: true });
+
+paymentSchema.index(
+  { providerOrderId: 1 },
+  { name: 'payment_provider_order_unique', unique: true, partialFilterExpression: { providerOrderId: { $type: 'string' } } },
+);
+paymentSchema.index(
+  { providerPaymentId: 1 },
+  { name: 'payment_provider_payment_unique', unique: true, partialFilterExpression: { providerPaymentId: { $type: 'string' } } },
+);
 
 export const Payment = mongoose.model('Payment', paymentSchema);

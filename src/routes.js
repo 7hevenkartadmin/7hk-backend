@@ -12,6 +12,7 @@ import { addressRoutes } from './modules/addresses/address.routes.js';
 import { realtimeRoutes } from './modules/realtime/realtime.routes.js';
 import { settingsRoutes } from './modules/settings/settings.routes.js';
 import { whatsappWebhookRoutes } from './modules/auth/whatsapp.webhook.js';
+import { razorpayWebhookRoutes } from './modules/payments/razorpay.webhook.js';
 
 export const routes = Router();
 
@@ -28,3 +29,4 @@ routes.use('/addresses', addressRoutes);
 routes.use('/realtime', realtimeRoutes);
 routes.use('/settings', settingsRoutes);
 routes.use('/webhooks/whatsapp', whatsappWebhookRoutes);
+routes.use('/webhooks/razorpay', razorpayWebhookRoutes);

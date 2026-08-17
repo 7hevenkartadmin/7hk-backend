@@ -35,10 +35,25 @@ export const defaultHomepageBanners = [
 ];
 
 export const defaultDeliveryZones = [
-  { code: 'A', label: 'Zone A', limit: 4, charge: 20, isActive: true },
-  { code: 'B', label: 'Zone B', limit: 8, charge: 35, isActive: true },
-  { code: 'C', label: 'Zone C', limit: 10, charge: 50, isActive: true },
+  { code: 'A', label: 'Zone A', limit: 4, charge: 20, orderCutoff: '20:00', isActive: true },
+  { code: 'B', label: 'Zone B', limit: 8, charge: 35, orderCutoff: '19:00', isActive: true },
+  { code: 'C', label: 'Zone C', limit: 10, charge: 50, orderCutoff: '19:00', isActive: true },
 ];
+
+export const defaultOrderingSchedule = {
+  timezone: 'Asia/Kolkata',
+  weeklySchedule: [
+    { dayOfWeek: 0, isOpen: true, opensAt: '09:00', closesAt: '20:00' },
+    { dayOfWeek: 1, isOpen: true, opensAt: '09:00', closesAt: '20:00' },
+    { dayOfWeek: 2, isOpen: true, opensAt: '09:00', closesAt: '20:00' },
+    { dayOfWeek: 3, isOpen: true, opensAt: '09:00', closesAt: '20:00' },
+    { dayOfWeek: 4, isOpen: true, opensAt: '09:00', closesAt: '20:00' },
+    { dayOfWeek: 5, isOpen: true, opensAt: '09:00', closesAt: '20:00' },
+    { dayOfWeek: 6, isOpen: true, opensAt: '09:00', closesAt: '20:00' },
+  ],
+  specialDates: [],
+  temporaryClosure: { isActive: false, startsAt: null, endsAt: null, reason: '' },
+};
 
 export const defaultCodSettings = {
   isEnabled: true,

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { env } from '../../config/env.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { OTP_DELIVERY_STATUS } from './otp.constants.js';
 
@@ -126,6 +127,9 @@ export class SecureOtpService {
         otpId, userId: identity, channel: payload.channel, recipient: payload.recipient,
         purpose: payload.purpose, requestId: payload.requestId, otp,
       });
+      if (env.NODE_ENV === 'development') {
+        console.info(`[DEV OTP ••••${String(payload.recipient).slice(-4)}] ${otp}`);
+      }
     } catch (error) {
       await this.redisClient.eval(
         CLEANUP_FAILED_ENQUEUE_SCRIPT, 2, challengeKey, cooldownKey, otpId,

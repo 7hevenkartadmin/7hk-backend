@@ -1,5 +1,7 @@
 import { DeliverySlot } from './deliverySlot.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { parseStoreDate, storeDateKey, todayStoreRange } from '../../shared/utils/storeDate.js';
+import { getStoreAvailability } from '../settings/storeAvailability.service.js';
 
 const defaultWindows = [
   ['08:00', '10:00'],
@@ -10,60 +12,54 @@ const defaultWindows = [
   ['18:00', '20:00'],
 ];
 
-function startOfDay(offset = 0) {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() + offset);
-  return date;
+function currentStoreTime(at = new Date()) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(at);
 }
 
-function slotHasNotEnded(slotDate, endsAt) {
-  const [hour, minute] = endsAt.split(':').map(Number);
-  const end = new Date(slotDate);
-  end.setHours(hour, minute, 0, 0);
-  return end > new Date();
-}
-
-async function ensureUpcomingSlots(serviceArea = 'Patna') {
+async function ensureTodaySlots(serviceArea = 'Patna', at = new Date()) {
   const operations = [];
-  for (const dayOffset of [0, 1]) {
-    const date = startOfDay(dayOffset);
-    for (const [startsAt, endsAt] of defaultWindows) {
-      if (!slotHasNotEnded(date, endsAt)) continue;
-      operations.push({
-        updateOne: {
-          filter: { date, startsAt, serviceArea },
-          update: {
-            $setOnInsert: {
-              date,
-              startsAt,
-              endsAt,
-              serviceArea,
-              capacity: 50,
-              booked: 0,
-              isActive: true,
-            },
+  const date = parseStoreDate(storeDateKey(at)).start;
+  const nowTime = currentStoreTime(at);
+  for (const [startsAt, endsAt] of defaultWindows) {
+    if (endsAt <= nowTime) continue;
+    operations.push({
+      updateOne: {
+        filter: { date, startsAt, serviceArea },
+        update: {
+          $setOnInsert: {
+            date,
+            startsAt,
+            endsAt,
+            serviceArea,
+            capacity: 50,
+            booked: 0,
+            isActive: true,
           },
-          upsert: true,
         },
-      });
-    }
+        upsert: true,
+      },
+    });
   }
   if (operations.length) await DeliverySlot.bulkWrite(operations, { ordered: false });
 }
 
-export async function listAvailableSlots(query = {}) {
-  await ensureUpcomingSlots(query.serviceArea || 'Patna');
-  const filter = { isActive: true, $expr: { $lt: ['$booked', '$capacity'] } };
-  if (query.serviceArea) filter.serviceArea = query.serviceArea;
-  if (query.date) {
-    const date = new Date(query.date);
-    const next = new Date(date);
-    next.setDate(date.getDate() + 1);
-    filter.date = { $gte: date, $lt: next };
-  } else {
-    filter.date = { $gte: new Date() };
+export async function listAvailableSlots(query = {}, { at = new Date() } = {}) {
+  if (query.date && storeDateKey(new Date(query.date)) !== storeDateKey(at)) {
+    throw new AppError('Only same-day delivery is available', 422, 'SAME_DAY_DELIVERY_ONLY');
   }
+  const availability = await getStoreAvailability({ distanceKm: query.distanceKm, at });
+  if (!availability.acceptingOrders) return [];
+  await ensureTodaySlots(query.serviceArea || 'Patna', at);
+  const today = parseStoreDate(storeDateKey(at));
+  const filter = {
+    date: { $gte: today.start, $lt: today.end },
+    endsAt: { $gt: currentStoreTime(at) },
+    isActive: true,
+    $expr: { $lt: ['$booked', '$capacity'] },
+  };
+  if (query.serviceArea) filter.serviceArea = query.serviceArea;
   return DeliverySlot.find(filter).sort({ date: 1, startsAt: 1 });
 }
 
@@ -72,7 +68,7 @@ export async function createSlot(payload) {
 }
 
 export async function listAdminSlots() {
-  return DeliverySlot.find({ date: { $gte: startOfDay(-1) } }).sort({ date: 1, startsAt: 1 });
+  return DeliverySlot.find({ date: { $gte: todayStoreRange().start } }).sort({ date: 1, startsAt: 1 });
 }
 
 export async function updateSlot(id, payload) {
@@ -87,8 +83,15 @@ export async function updateSlot(id, payload) {
 }
 
 export async function reserveSlot(slotId, session) {
+  const today = todayStoreRange();
   const slot = await DeliverySlot.findOneAndUpdate(
-    { _id: slotId, isActive: true, $expr: { $lt: ['$booked', '$capacity'] } },
+    {
+      _id: slotId,
+      date: { $gte: today.start, $lt: today.end },
+      endsAt: { $gt: currentStoreTime() },
+      isActive: true,
+      $expr: { $lt: ['$booked', '$capacity'] },
+    },
     { $inc: { booked: 1 } },
     { new: true, session },
   );

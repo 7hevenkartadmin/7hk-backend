@@ -11,7 +11,7 @@ export const adminOrdersQuerySchema = z.object({
   from: dateString.optional(),
   to: dateString.optional(),
   status: z.enum(ORDER_STATUSES).optional(),
-  paymentStatus: z.enum(['pending', 'paid', 'failed', 'refunded']).optional(),
+  paymentStatus: z.enum(['pending', 'paid', 'failed', 'partially_refunded', 'refunded']).optional(),
   search: z.string().trim().max(80).optional(),
 }).refine((query) => !(query.date && (query.from || query.to)), {
   message: 'Use either date or from/to filters',
@@ -22,4 +22,18 @@ export const adminOrdersQuerySchema = z.object({
 
 export const dashboardStatsQuerySchema = z.object({
   period: z.enum(['weekly', 'monthly', 'yearly']).default('weekly'),
+});
+
+export const auditLogsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  action: z.string().trim().max(80).optional(),
+  entityType: z.string().trim().max(80).optional(),
+  actorRole: z.enum(['admin', 'manager', 'support']).optional(),
+  from: dateString.optional(),
+  to: dateString.optional(),
+  search: z.string().trim().max(80).optional(),
+}).refine((query) => !query.from || !query.to || query.from <= query.to, {
+  message: 'from must be before or equal to to',
+  path: ['to'],
 });

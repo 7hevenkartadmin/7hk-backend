@@ -10,6 +10,7 @@ import { Product } from './product.model.js';
 import { Category } from './category.model.js';
 import { catalogImageUpload } from './catalog-upload.middleware.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { deleteCatalogImage, uploadCatalogImage } from './cloudinary-image.service.js';
 
 export const catalogRoutes = Router();
 
@@ -51,8 +52,13 @@ catalogRoutes.use(requireAuth, authorize('admin', 'manager'));
 
 catalogRoutes.post('/uploads/images', catalogImageUpload, asyncHandler(async (req, res) => {
   if (!req.file) throw new AppError('Image file is required', 422, 'IMAGE_REQUIRED');
-  const origin = `${req.protocol}://${req.get('host')}`;
-  created(res, { image: { url: `${origin}/uploads/catalog/${req.file.filename}` } }, 'Image uploaded');
+  const image = await uploadCatalogImage(req.file, { kind: req.body.kind || 'product', actorId: req.user._id });
+  created(res, { image }, 'Image uploaded');
+}));
+
+catalogRoutes.delete('/uploads/images', asyncHandler(async (req, res) => {
+  await deleteCatalogImage(req.body.publicId);
+  ok(res, {}, 'Image deleted');
 }));
 
 catalogRoutes.post('/products', validate(productSchema), asyncHandler(async (req, res) => {
