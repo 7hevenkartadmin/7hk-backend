@@ -22,6 +22,31 @@ export function extractWhatsAppMessageStatuses(payload) {
     .map((status) => ({ providerMessageId: status.id, status: status.status }));
 }
 
+export async function processWhatsAppMessageStatuses(payload, otpService) {
+  const statuses = extractWhatsAppMessageStatuses(payload);
+  await Promise.all(statuses.map(({ providerMessageId, status }) => (
+    otpService.recordProviderStatus(providerMessageId, status)
+  )));
+  return statuses.length;
+}
+
+export async function handleWhatsAppWebhook({
+  rawBody,
+  signatureHeader,
+  appSecret,
+  payload,
+  otpService,
+}) {
+  if (!isValidMetaWebhookSignature(rawBody, signatureHeader, appSecret)) {
+    return { statusCode: 401, processedStatuses: 0 };
+  }
+  const service = typeof otpService === 'function' ? otpService() : otpService;
+  return {
+    statusCode: 200,
+    processedStatuses: await processWhatsAppMessageStatuses(payload, service),
+  };
+}
+
 export const whatsappWebhookRoutes = Router();
 
 whatsappWebhookRoutes.get('/', (req, res) => {
@@ -35,18 +60,12 @@ whatsappWebhookRoutes.get('/', (req, res) => {
 });
 
 whatsappWebhookRoutes.post('/', asyncHandler(async (req, res) => {
-  if (!isValidMetaWebhookSignature(
-    req.rawBody,
-    req.headers['x-hub-signature-256'],
-    env.META_WHATSAPP_APP_SECRET,
-  )) {
-    return res.sendStatus(401);
-  }
-
-  const statuses = extractWhatsAppMessageStatuses(req.body);
-  const otpService = getSevenHeavenOtpService();
-  await Promise.all(statuses.map(({ providerMessageId, status }) => (
-    otpService.recordProviderStatus(providerMessageId, status)
-  )));
-  return res.sendStatus(200);
+  const result = await handleWhatsAppWebhook({
+    rawBody: req.rawBody,
+    signatureHeader: req.headers['x-hub-signature-256'],
+    appSecret: env.META_WHATSAPP_APP_SECRET,
+    payload: req.body,
+    otpService: getSevenHeavenOtpService,
+  });
+  return res.sendStatus(result.statusCode);
 }));

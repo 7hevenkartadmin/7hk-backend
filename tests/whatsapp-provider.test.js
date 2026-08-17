@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'crypto';
 import { MetaWhatsAppOtpProvider } from '../src/modules/auth/providers/meta-whatsapp.provider.js';
-import { extractWhatsAppMessageStatuses, isValidMetaWebhookSignature } from '../src/modules/auth/whatsapp.webhook.js';
+import {
+  extractWhatsAppMessageStatuses,
+  handleWhatsAppWebhook,
+  isValidMetaWebhookSignature,
+} from '../src/modules/auth/whatsapp.webhook.js';
 
 test('Meta provider sends the approved authentication template with copy-code parameters', async () => {
   let captured;
@@ -80,4 +84,64 @@ test('WhatsApp webhook parser extracts only message status callbacks', () => {
     { providerMessageId: 'wamid.one', status: 'sent' },
     { providerMessageId: 'wamid.two', status: 'delivered' },
   ]);
+});
+
+test('invalid webhook signature returns 401 without creating or mutating OTP state', async () => {
+  let serviceCreations = 0;
+  const rawBody = Buffer.from('{"object":"whatsapp_business_account"}');
+  const result = await handleWhatsAppWebhook({
+    rawBody,
+    signatureHeader: 'sha256=invalid',
+    appSecret: 'webhook-test-key',
+    payload: { object: 'whatsapp_business_account' },
+    otpService() {
+      serviceCreations += 1;
+      return { async recordProviderStatus() {} };
+    },
+  });
+
+  assert.deepEqual(result, { statusCode: 401, processedStatuses: 0 });
+  assert.equal(serviceCreations, 0);
+});
+
+test('valid exact-body signature forwards only message ID and status from sensitive payloads', async () => {
+  const appSecret = 'webhook-test-key';
+  const canaries = [
+    'phone-canary-not-forwarded',
+    'message-canary-not-forwarded',
+    'raw-payload-canary-not-forwarded',
+  ];
+  const calls = [];
+  const payload = {
+    object: 'whatsapp_business_account',
+    rawMarker: canaries[2],
+    entry: [{ changes: [{ field: 'messages', value: {
+      metadata: { display_phone_number: canaries[0] },
+      messages: [{ text: { body: canaries[1] } }],
+      statuses: [{
+        id: 'wamid.signed-status',
+        status: 'read',
+        recipient_id: canaries[0],
+      }],
+    } }] }],
+  };
+  const rawBody = Buffer.from(JSON.stringify(payload));
+  const signatureHeader = `sha256=${crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex')}`;
+
+  const result = await handleWhatsAppWebhook({
+    rawBody,
+    signatureHeader,
+    appSecret,
+    payload,
+    otpService: {
+      async recordProviderStatus(providerMessageId, status) {
+        calls.push({ providerMessageId, status });
+      },
+    },
+  });
+
+  assert.deepEqual(result, { statusCode: 200, processedStatuses: 1 });
+  assert.deepEqual(calls, [{ providerMessageId: 'wamid.signed-status', status: 'read' }]);
+  const serialized = JSON.stringify(calls);
+  canaries.forEach((canary) => assert.equal(serialized.includes(canary), false));
 });

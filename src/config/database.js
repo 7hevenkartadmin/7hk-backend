@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { env } from './env.js';
 
-const REQUIRED_PAYMENT_INDEXES = [
+const REQUIRED_PRODUCTION_INDEXES = [
   ['paymentintents', { user: 1, idempotencyKey: 1 }, {
     name: 'payment_intent_user_idempotency_unique',
     partialFilterExpression: { idempotencyKey: { $type: 'string' } },
@@ -28,6 +28,7 @@ const REQUIRED_PAYMENT_INDEXES = [
   }],
   ['paymentwebhookevents', { eventId: 1 }, { name: 'razorpay_webhook_event_unique' }],
   ['inventorymovements', { idempotencyKey: 1 }, { name: 'inventory_movement_idempotency_unique' }],
+  ['logincompletions', { proofDigest: 1 }, { name: 'login_completion_proof_digest_unique' }],
 ];
 
 function hasSameKey(left, right) {
@@ -43,8 +44,8 @@ async function listIndexes(collection) {
   }
 }
 
-async function ensurePaymentIndexes(database) {
-  for (const [collectionName, key, options] of REQUIRED_PAYMENT_INDEXES) {
+async function ensureProductionIndexes(database) {
+  for (const [collectionName, key, options] of REQUIRED_PRODUCTION_INDEXES) {
     const collection = database.collection(collectionName);
     const existing = (await listIndexes(collection)).find((index) => hasSameKey(index.key, key));
 
@@ -61,6 +62,27 @@ async function ensurePaymentIndexes(database) {
   }
 }
 
+export async function assertDatabaseTransactionSupport(database = mongoose.connection.db, {
+  startSession = () => mongoose.startSession(),
+} = {}) {
+  let session;
+  try {
+    session = await startSession();
+    await session.withTransaction(async () => {
+      await database.collection('logincompletions').findOne(
+        { _id: null },
+        { session, projection: { _id: 1 } },
+      );
+    });
+  } catch (error) {
+    throw new Error('MongoDB transaction support is required for OTP login completion', {
+      cause: error,
+    });
+  } finally {
+    if (session) await session.endSession();
+  }
+}
+
 export async function connectDatabase() {
   mongoose.set('strictQuery', true);
   await mongoose.connect(env.MONGODB_URI, {
@@ -69,9 +91,10 @@ export async function connectDatabase() {
   });
 
   // Development models already build their declared indexes. Production keeps
-  // autoIndex disabled and creates only the payment integrity indexes we rely on.
+  // autoIndex disabled and creates only integrity indexes relied on at runtime.
   if (env.NODE_ENV === 'production') {
-    await ensurePaymentIndexes(mongoose.connection.db);
+    await ensureProductionIndexes(mongoose.connection.db);
+    await assertDatabaseTransactionSupport(mongoose.connection.db);
   }
   console.log('Connected to MongoDB');
 }

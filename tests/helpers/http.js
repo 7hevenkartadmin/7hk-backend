@@ -1,7 +1,7 @@
 import { createApp } from '../../src/app.js';
 
-export async function createTestClient() {
-  const app = createApp();
+export async function createTestClient(appOptions) {
+  const app = createApp(appOptions);
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, () => resolve(instance));
   });

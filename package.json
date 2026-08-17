@@ -9,12 +9,14 @@
     "start": "node src/server.js",
     "seed": "node src/scripts/seed.js",
     "migrate:inventory": "node src/scripts/migrate-inventory.js",
-    "test": "node --test tests/*.test.js",
-    "test:backend": "node --test tests/*.test.js",
-    "test:api": "node --test tests/api.integration.test.js",
-    "test:services": "node --test tests/*service.test.js",
-    "test:schemas": "node --test tests/model-schema.test.js tests/validation.test.js",
-    "lint": "eslint src tests"
+    "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",
+    "test:backend": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",
+    "test:api": "node --import ./tests/setup-env.js --test tests/api.integration.test.js",
+    "test:services": "node --import ./tests/setup-env.js --test tests/*service.test.js",
+    "test:schemas": "node --import ./tests/setup-env.js --test tests/model-schema.test.js tests/validation.test.js",
+    "test:required-fixtures": "node --import ./tests/setup-required-fixtures.js --test --test-concurrency=1 tests/*.test.js",
+    "verify:whatsapp-callback-readiness": "node scripts/verify-whatsapp-callback-readiness.js",
+    "lint": "eslint src tests scripts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -41,7 +43,8 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "eslint": "^9.5.0"
+    "eslint": "^9.5.0",
+    "fast-check": "3.23.2"
   },
   "engines": {
     "node": ">=20"

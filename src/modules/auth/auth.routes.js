@@ -8,6 +8,7 @@ import { authRateLimiter, otpRateLimiter } from '../../shared/middlewares/rateLi
 import { loginSchema, refreshSchema, registerSchema, requestOtpSchema, verifyOtpSchema } from './auth.validation.js';
 import { login, logout, refreshSession, registerCustomer, requestOtp, resendOtp, verifyOtp } from './auth.service.js';
 import { requireAuth } from './auth.middleware.js';
+import { tokenLifetimeMs } from './token.service.js';
 
 export const authRoutes = Router();
 
@@ -19,12 +20,19 @@ const cookieOptions = {
 
 const refreshCookiePath = `/api/${env.API_VERSION}/auth`;
 
-function attachCookies(res, tokens) {
-  res.cookie('accessToken', tokens.accessToken, { ...cookieOptions, path: '/', maxAge: 15 * 60 * 1000 });
+export function attachCookies(res, tokens, currentTimeMs = Date.now()) {
+  const accessMaxAge = tokenLifetimeMs(tokens.accessToken, currentTimeMs);
+  const refreshMaxAge = tokenLifetimeMs(tokens.refreshToken, currentTimeMs);
+
+  res.cookie('accessToken', tokens.accessToken, {
+    ...cookieOptions,
+    path: '/',
+    maxAge: accessMaxAge,
+  });
   res.cookie('refreshToken', tokens.refreshToken, {
     ...cookieOptions,
     path: refreshCookiePath,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: refreshMaxAge,
   });
 }
 

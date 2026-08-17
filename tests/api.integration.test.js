@@ -117,3 +117,26 @@ test('malformed JSON returns normalized client error', async (t) => {
   assert.equal(body.success, false);
   assert.equal(body.code, 'MALFORMED_JSON');
 });
+
+// **Validates: Requirements 2.6**
+test('production health fails closed when MongoDB transaction capability is unavailable', async (t) => {
+  let checks = 0;
+  const client = await createTestClient({
+    requireTransactionHealthCheck: true,
+    async databaseTransactionCheck() {
+      checks += 1;
+      throw new Error('synthetic transaction capability failure');
+    },
+  });
+  t.after(() => client.close());
+
+  const { response, body } = await client.request('/health');
+
+  assert.equal(checks, 1);
+  assert.equal(response.status, 503);
+  assert.deepEqual(body, {
+    success: false,
+    service: '7Heven API',
+    status: 'unhealthy',
+  });
+});

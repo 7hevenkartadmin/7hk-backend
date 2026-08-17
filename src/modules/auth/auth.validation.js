@@ -1,6 +1,9 @@
 import { z } from 'zod';
+import { OTP_CODE_PATTERN } from './otp.constants.js';
+import { INDIAN_MOBILE_PATTERN } from './phone.js';
 
-const phone = z.string().min(10).max(20);
+const phone = z.string().regex(INDIAN_MOBILE_PATTERN, 'Valid Indian mobile number required');
+const otp = z.string().regex(OTP_CODE_PATTERN, 'OTP must contain exactly six decimal digits');
 const password = z.string().min(8).max(128);
 
 export const registerSchema = z.object({
@@ -18,11 +21,11 @@ export const loginSchema = z.object({
 export const refreshSchema = z.object({}).strict();
 
 export const requestOtpSchema = z.object({
-  phone: z.string().min(10).max(20),
+  phone,
 });
 
 export const verifyOtpSchema = z.object({
-  phone: z.string().min(10).max(20),
-  otp: z.string().length(6),
+  phone,
+  otp,
   name: z.string().min(2).max(80).optional(),
 });

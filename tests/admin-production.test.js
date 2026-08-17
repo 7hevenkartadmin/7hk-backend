@@ -87,7 +87,7 @@ test('admin products apply server pagination and visibility/stock filters in Mon
     assert.deepEqual(calls.find(([name]) => name === 'limit'), ['limit', 20]);
     const filter = calls.find(([name]) => name === 'find')[1];
     assert.equal(filter.isActive, false);
-    assert.equal(filter.stock, 0);
+    assert.equal(filter.availableStock, 0);
   });
 });
 
@@ -109,15 +109,12 @@ test('dashboard statistics use database counts, aggregation, and exactly five re
     limit(value) { recentLimit = value; return this; },
     lean() { return Promise.resolve(Array.from({ length: 5 }, (_, index) => ({ orderNumber: `ORD-${index}` }))); },
   };
-  const lowStockQuery = {
-    sort() { return this; }, limit() { return this; }, select() { return this; }, lean() { return Promise.resolve([{ name: 'Tomato', stock: 2 }]); },
-  };
   await withStubs([
     { object: Order, method: 'countDocuments', implementation: async () => orderCounts[orderCountIndex++] },
     { object: Product, method: 'countDocuments', implementation: async () => productCounts[productCountIndex++] },
     { object: Order, method: 'aggregate', implementation: async () => aggregates[aggregateIndex++] },
+    { object: Product, method: 'aggregate', implementation: async () => [{ name: 'Tomato', stock: 2 }] },
     { object: Order, method: 'find', implementation: () => recentQuery },
-    { object: Product, method: 'find', implementation: () => lowStockQuery },
   ], async () => {
     const stats = await getDashboardStats('weekly');
     assert.deepEqual(stats.orders, { total: 1248, today: 18, pending: 7, delivered: 1180, cancelled: 61 });

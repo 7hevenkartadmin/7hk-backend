@@ -11,14 +11,21 @@ not reuse these routes or Meta messages.
    `meta-whatsapp-auth-template.json` for the WhatsApp Business Account.
 2. Configure the `META_*` and `WHATSAPP_PROVIDER=meta` environment variables
    listed in `.env.example`.
-3. Configure this callback in Meta and subscribe the WhatsApp Business Account
-   to message events:
+3. Configure the exact public HTTPS callback URL from
+   `WHATSAPP_PUBLIC_CALLBACK_URL` in Meta. It must identify the deployed route,
+   for example:
 
-   `https://<api-host>/api/v1/webhooks/whatsapp`
+   `https://api.example.com/api/v1/webhooks/whatsapp`
 
-4. Use the same private value for Meta's webhook verification token and
-   `META_WHATSAPP_WEBHOOK_VERIFY_TOKEN`. The backend additionally validates
-   every callback's `X-Hub-Signature-256` using `META_WHATSAPP_APP_SECRET`.
+4. Complete Meta's GET verification challenge. The callback accepts
+   `hub.mode=subscribe` only when `hub.verify_token` exactly matches
+   `META_WHATSAPP_WEBHOOK_VERIFY_TOKEN`, then returns `hub.challenge` as plain
+   text.
+5. Subscribe the WhatsApp Business Account to the `messages` webhook field.
+6. Keep `META_WHATSAPP_APP_SECRET` private. Every callback POST must include a
+   valid `X-Hub-Signature-256` computed over the exact raw request bytes. The
+   backend rejects an invalid signature before parsing statuses or changing
+   correlation/delivery state.
 
 The template name and language must exactly match the approved Meta template.
 Keep `META_GRAPH_API_VERSION` configurable and set it to a currently supported
@@ -84,16 +91,73 @@ logs or general preferences.
   required for atomic verification, rate limits, queue durability, and delivery
   state.
 
-## Deployment smoke test
+## Deployment smoke test and readiness evidence
 
-Use one allow-listed test number before opening production traffic:
+Use exactly one operator-approved, allow-listed test number before opening
+production traffic. Configure it as `WHATSAPP_SMOKE_TEST_ALLOWLISTED_PHONE` in
+the deployment environment; do not pass a target number on the command line or
+write it into evidence, logs, or terminal output.
 
-1. Request an OTP and confirm the API returns only an opaque token and timing
-   metadata.
-2. Confirm Meta accepts the template message and that webhook diagnostics
-   observe `DELIVERED` or `READ` without generating browser requests.
-3. Verify that a correct OTP succeeds exactly once and that an old OTP fails
-   after resend.
-4. Send an invalid webhook signature and confirm it receives HTTP 401.
-5. Confirm neither application logs nor monitoring contain phone numbers, OTPs,
-   access tokens, cookies, or raw webhook bodies.
+1. Request an OTP and confirm the response `data` contains only
+   `expiresInSeconds` and `resendAfterSeconds`. It contains no response token.
+2. Capture timestamped evidence of a Meta-originated callback reaching the
+   exact configured public HTTPS callback URL. A local request is insufficient.
+3. Capture timestamped evidence that Meta's GET verification challenge succeeds
+   with the configured verification token.
+4. Confirm through Meta Dashboard or the Meta API that the WhatsApp Business
+   Account is subscribed to the `messages` webhook field.
+5. During the allow-listed OTP flow, accept a status callback with a valid
+   signature over the exact raw body and confirm its sanitized diagnostic
+   contains the originating request ID.
+6. Send an invalid-signature callback and confirm HTTP 401 with unchanged
+   correlation and delivery state.
+7. Verify the OTP once, verify that an old OTP fails after resend, and confirm
+   application logs and monitoring contain no complete phone, OTP, credential,
+   token, cookie, message body, provider payload, or raw webhook body.
+
+Record the five callback checks through a trusted deployment collector. The
+collector must derive its facts from Meta configuration, correlated backend
+diagnostics, and before/after callback state rather than accepting operator
+booleans. It must create a unique UUID `WHATSAPP_CALLBACK_READINESS_RUN_ID` for
+each attempt and bind the evidence to the configured environment, deployment ID,
+callback URL, and `WHATSAPP_CALLBACK_EVIDENCE_PRODUCER_ID`.
+
+Configure the collector's Ed25519 public verification key as the base64 DER
+`WHATSAPP_CALLBACK_EVIDENCE_PUBLIC_KEY`. The corresponding private signing key
+must not be available to the gate or operator process and must never be stored in
+the repository, evidence, logs, command arguments, or terminal output. The gate
+contains no generic signing helper and cannot create passing evidence; it only
+verifies artifacts emitted by the independently trusted collector. Signed
+evidence is valid for at most ten minutes, and every check timestamp must fall
+between its signed `issuedAt` and `expiresAt` values.
+
+The evidence contains only version and run bindings, an allow-list confirmation,
+and these named checks: `metaOriginatedReachability`,
+`verificationChallenge`, `messageEventSubscription`,
+`validSignedCorrelatedStatus`, and
+`invalidSignatureRejectedWithoutMutation`. Valid-status evidence also requires
+the sanitized request ID, and invalid-signature evidence requires HTTP 401 and
+`stateChanged: false`. Do not put the test number, private signing key, or any
+secret or payload in this file. Do not hand-edit or self-attest deployed facts:
+any change after signing invalidates public-key signature verification.
+
+Run the noninteractive repository gate after configuring the readiness names
+shown in `.env.example`:
+
+```sh
+npm run verify:whatsapp-callback-readiness -- --evidence ./callback-evidence.json
+```
+
+The command performs no Meta request and sends no message. It atomically records
+the authenticated run ID under `WHATSAPP_CALLBACK_EVIDENCE_REPLAY_DIRECTORY`,
+so reused evidence is rejected. It also rejects unsigned, tampered, stale,
+future-dated, overlong-window, or incorrectly bound evidence. It exits nonzero
+and prints only sanitized failed-check names with environment/deployment/run
+identifiers until all five checks pass. Repository tests do not complete Meta
+setup; an operator must collect and authenticate these deployed facts before
+callback readiness can be declared.
+
+Production login completion requires a transaction-capable MongoDB deployment.
+Set `REQUIRE_INTEGRATION_FIXTURES=true` in required CI and pre-production test
+jobs so validation fails if Redis or transaction-capable MongoDB is unavailable.
+Local developer runs may leave it false and receive explicit fixture skips.

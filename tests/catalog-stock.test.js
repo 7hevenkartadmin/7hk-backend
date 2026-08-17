@@ -23,6 +23,11 @@ test('public products expose availability without leaking exact inventory', () =
   assert.equal(product.variants[0].stock, 0);
 });
 
-test('public products without variants expose only availability', () => {
-  assert.deepEqual(toPublicProduct({ stock: 9, reservedStock: 2, variants: [] }), { isAvailable: true, variants: [] });
+test('public products without variants expose aggregate and default availability', () => {
+  assert.deepEqual(toPublicProduct({ stock: 9, reservedStock: 2, variants: [] }), {
+    isAvailable: true,
+    defaultVariantId: undefined,
+    defaultVariantAvailable: true,
+    variants: [],
+  });
 });

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
-import { env } from '../../config/env.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { OTP_DELIVERY_STATUS } from './otp.constants.js';
+import { emitOtpDiagnostic, OTP_DIAGNOSTIC_EVENT } from './otp-diagnostics.js';
 
 const CONSUME_RATE_LIMIT_SCRIPT = `
   local count = redis.call('INCR', KEYS[1])
@@ -29,33 +29,76 @@ const CLEANUP_FAILED_ENQUEUE_SCRIPT = `
   return 0
 `;
 
-const VERIFY_AND_CONSUME_SCRIPT = `
-  if redis.call('EXISTS', KEYS[1]) == 0 then return { 'NOT_FOUND' } end
-  local storedHash = redis.call('HGET', KEYS[1], 'otpHash')
-  local maxAttempts = tonumber(redis.call('HGET', KEYS[1], 'maxAttempts'))
-  if storedHash ~= ARGV[1] then
-    local attempts = redis.call('HINCRBY', KEYS[1], 'attempts', 1)
-    if attempts >= maxAttempts then
+const VERIFY_TO_PROOF_SCRIPT = `
+  if redis.call('EXISTS', KEYS[1]) == 1 then
+    local remainingTtl = redis.call('PTTL', KEYS[1])
+    if remainingTtl <= 0 then
       redis.call('DEL', KEYS[1])
-      return { 'BLOCKED' }
+      return { 'NOT_FOUND' }
     end
-    return { 'INVALID' }
+    local storedHash = redis.call('HGET', KEYS[1], 'otpHash')
+    local maxAttempts = tonumber(redis.call('HGET', KEYS[1], 'maxAttempts'))
+    if storedHash ~= ARGV[1] then
+      local attempts = redis.call('HINCRBY', KEYS[1], 'attempts', 1)
+      if attempts >= maxAttempts then
+        redis.call('DEL', KEYS[1])
+        return { 'BLOCKED' }
+      end
+      return { 'INVALID' }
+    end
+    redis.call('HSET', KEYS[2],
+      'proofId', ARGV[2], 'otpHash', storedHash, 'state', 'VERIFIED')
+    redis.call('PEXPIRE', KEYS[2], remainingTtl)
+    redis.call('DEL', KEYS[1])
+    return { 'VERIFIED', ARGV[2], remainingTtl }
   end
-  redis.call('DEL', KEYS[1])
-  return { 'VERIFIED' }
+
+  if redis.call('EXISTS', KEYS[2]) == 0 then return { 'NOT_FOUND' } end
+  local state = redis.call('HGET', KEYS[2], 'state')
+  if state == 'DENIED' then return { 'NOT_FOUND' } end
+  if redis.call('HGET', KEYS[2], 'otpHash') ~= ARGV[1] then return { 'INVALID' } end
+  return {
+    'VERIFIED',
+    redis.call('HGET', KEYS[2], 'proofId'),
+    redis.call('PTTL', KEYS[2])
+  }
+`;
+
+const TRANSITION_VERIFIED_PROOF_SCRIPT = `
+  if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+  if redis.call('HGET', KEYS[1], 'proofId') ~= ARGV[1] then return 0 end
+  local current = redis.call('HGET', KEYS[1], 'state')
+  local target = ARGV[2]
+  if target == 'DENIED' then
+    if current == 'DENIED' then return 1 end
+    if current ~= 'VERIFIED' and current ~= 'COMPLETED' then return 0 end
+    redis.call('HSET', KEYS[1], 'state', target)
+    redis.call('HDEL', KEYS[1], 'otpHash')
+    return 1
+  elseif target == 'COMPLETED' then
+    if current == 'DENIED' then return 0 end
+    if current == 'COMPLETED' then return 1 end
+    if current ~= 'VERIFIED' then return 0 end
+  else
+    return 0
+  end
+  redis.call('HSET', KEYS[1], 'state', target)
+  return 1
 `;
 
 const RECORD_ACCEPTED_SCRIPT = `
-  if redis.call('HGET', KEYS[1], 'otpId') ~= ARGV[1] then return 0 end
   redis.call('SET', KEYS[2], ARGV[2], 'EX', ARGV[3])
   local pendingStatus = redis.call('GET', KEYS[3])
-  if pendingStatus then
-    redis.call('HSET', KEYS[1], 'deliveryStatus', pendingStatus, 'deliveryUpdatedAt', ARGV[4])
-    redis.call('DEL', KEYS[3])
-  else
-    redis.call('HSET', KEYS[1], 'deliveryStatus', 'ACCEPTED', 'deliveryUpdatedAt', ARGV[4])
+  local challengeMatches = redis.call('HGET', KEYS[1], 'otpId') == ARGV[1]
+  if challengeMatches then
+    if pendingStatus then
+      redis.call('HSET', KEYS[1], 'deliveryStatus', pendingStatus, 'deliveryUpdatedAt', ARGV[4])
+    else
+      redis.call('HSET', KEYS[1], 'deliveryStatus', 'ACCEPTED', 'deliveryUpdatedAt', ARGV[4])
+    end
   end
-  return 1
+  if pendingStatus then redis.call('DEL', KEYS[3]) end
+  return { 1, pendingStatus or '', challengeMatches and 1 or 0 }
 `;
 
 const UPDATE_STATUS_SCRIPT = `
@@ -93,7 +136,8 @@ const PUBLIC_PROVIDER_STATUSES = new Set(['SENT', 'DELIVERED', 'READ', 'FAILED']
 
 export class SecureOtpService {
   constructor({ redisClient, notificationQueue, tokenService, ttlSeconds = 300, maxAttempts = 5,
-    requestLimit = 5, requestWindowSeconds = 60, resendCooldownSeconds = 30 }) {
+    requestLimit = 5, requestWindowSeconds = 60, resendCooldownSeconds = 30,
+    correlationTtlSeconds = 24 * 60 * 60, diagnosticSink }) {
     this.redisClient = redisClient;
     this.notificationQueue = notificationQueue;
     this.tokenService = tokenService;
@@ -102,6 +146,8 @@ export class SecureOtpService {
     this.requestLimit = requestLimit;
     this.requestWindowSeconds = requestWindowSeconds;
     this.resendCooldownSeconds = resendCooldownSeconds;
+    this.correlationTtlSeconds = Math.max(correlationTtlSeconds, ttlSeconds * 2);
+    this.diagnosticSink = diagnosticSink;
   }
 
   async requestOtp(payload) {
@@ -127,9 +173,6 @@ export class SecureOtpService {
         otpId, userId: identity, channel: payload.channel, recipient: payload.recipient,
         purpose: payload.purpose, requestId: payload.requestId, otp,
       });
-      if (env.NODE_ENV === 'development') {
-        console.info(`[DEV OTP ••••${String(payload.recipient).slice(-4)}] ${otp}`);
-      }
     } catch (error) {
       await this.redisClient.eval(
         CLEANUP_FAILED_ENQUEUE_SCRIPT, 2, challengeKey, cooldownKey, otpId,
@@ -150,29 +193,83 @@ export class SecureOtpService {
   async verifyOtp(payload) {
     const identity = this.#identity(payload);
     const result = await this.redisClient.eval(
-      VERIFY_AND_CONSUME_SCRIPT, 1, this.#challengeKey(identity),
-      this.tokenService.hash(payload.otp, identity),
+      VERIFY_TO_PROOF_SCRIPT, 2, this.#challengeKey(identity), this.#verifiedProofKey(identity),
+      this.tokenService.hash(payload.otp, identity), crypto.randomUUID(),
     );
-    if (result?.[0] !== 'VERIFIED') {
+    if (result?.[0] !== 'VERIFIED' || !result[1]) {
       throw new AppError('Invalid or expired OTP', 401, 'OTP_INVALID');
     }
-    return { status: 'OTP_VERIFIED' };
+    return { status: 'OTP_VERIFIED', proofId: String(result[1]) };
   }
 
-  async recordDeliveryAccepted({ identity, otpId, providerMessageId }) {
+  async denyVerifiedProof(payload, proofId) {
+    const identity = this.#identity(payload);
+    return Number(await this.redisClient.eval(
+      TRANSITION_VERIFIED_PROOF_SCRIPT,
+      1,
+      this.#verifiedProofKey(identity),
+      proofId,
+      'DENIED',
+    )) === 1;
+  }
+
+  async markVerifiedProofCompleted(payload, proofId) {
+    const identity = this.#identity(payload);
+    return Number(await this.redisClient.eval(
+      TRANSITION_VERIFIED_PROOF_SCRIPT,
+      1,
+      this.#verifiedProofKey(identity),
+      proofId,
+      'COMPLETED',
+    )) === 1;
+  }
+
+  async recordDeliveryAccepted({ identity, otpId, providerMessageId, requestId }) {
     const challengeKey = this.#challengeKey(identity);
-    const mapping = JSON.stringify({ challengeKey, otpId });
-    await this.redisClient.eval(
-      RECORD_ACCEPTED_SCRIPT, 3, challengeKey, this.#messageKey(providerMessageId),
-      this.#pendingStatusKey(providerMessageId), otpId, mapping, this.ttlSeconds * 2, Date.now(),
-    );
+    const mapping = JSON.stringify({ challengeKey, otpId, requestId });
+    let result;
+    try {
+      result = await this.redisClient.eval(
+        RECORD_ACCEPTED_SCRIPT, 3, challengeKey, this.#messageKey(providerMessageId),
+        this.#pendingStatusKey(providerMessageId), otpId, mapping,
+        this.correlationTtlSeconds, Date.now(),
+      );
+    } catch (error) {
+      this.#emit({ eventType: OTP_DIAGNOSTIC_EVENT.PERSISTENCE_FAILED, requestId });
+      throw error;
+    }
+
+    this.#emit({ eventType: OTP_DIAGNOSTIC_EVENT.ACCEPTED, requestId });
+    const reconciledStatus = String(result?.[1] || '').toUpperCase();
+    if (PUBLIC_PROVIDER_STATUSES.has(reconciledStatus)) {
+      this.#emit({
+        eventType: OTP_DIAGNOSTIC_EVENT.SIGNED_WEBHOOK_STATUS,
+        requestId,
+        deliveryState: reconciledStatus,
+      });
+    }
+    return Number(result?.[2]) === 1;
   }
 
-  async recordDeliveryFailed({ identity, otpId }) {
-    await this.redisClient.eval(
-      UPDATE_STATUS_SCRIPT, 1, this.#challengeKey(identity), otpId,
-      OTP_DELIVERY_STATUS.FAILED, Date.now(),
-    );
+  async recordDeliveryFailed({ identity, otpId, requestId, providerCode, permanent = false }) {
+    if (permanent) {
+      this.#emit({
+        eventType: OTP_DIAGNOSTIC_EVENT.PERMANENTLY_REJECTED,
+        requestId,
+        providerCode,
+      });
+    }
+
+    try {
+      const updated = await this.redisClient.eval(
+        UPDATE_STATUS_SCRIPT, 1, this.#challengeKey(identity), otpId,
+        OTP_DELIVERY_STATUS.FAILED, Date.now(),
+      );
+      return Number(updated) === 1;
+    } catch (error) {
+      this.#emit({ eventType: OTP_DIAGNOSTIC_EVENT.PERSISTENCE_FAILED, requestId });
+      throw error;
+    }
   }
 
   async recordProviderStatus(providerMessageId, status) {
@@ -185,15 +282,37 @@ export class SecureOtpService {
         1,
         this.#pendingStatusKey(providerMessageId),
         normalizedStatus,
-        this.ttlSeconds * 2,
+        this.correlationTtlSeconds,
       );
       return false;
     }
-    const { challengeKey, otpId } = JSON.parse(mapping);
-    const updated = await this.redisClient.eval(
-      UPDATE_STATUS_SCRIPT, 1, challengeKey, otpId, normalizedStatus, Date.now(),
-    );
-    return Number(updated) === 1;
+
+    let correlation;
+    try {
+      correlation = JSON.parse(mapping);
+    } catch {
+      return false;
+    }
+    if (!correlation?.challengeKey || !correlation?.otpId || !correlation?.requestId) return false;
+
+    try {
+      const updated = await this.redisClient.eval(
+        UPDATE_STATUS_SCRIPT, 1, correlation.challengeKey, correlation.otpId,
+        normalizedStatus, Date.now(),
+      );
+      this.#emit({
+        eventType: OTP_DIAGNOSTIC_EVENT.SIGNED_WEBHOOK_STATUS,
+        requestId: correlation.requestId,
+        deliveryState: normalizedStatus,
+      });
+      return Number(updated) === 1;
+    } catch (error) {
+      this.#emit({
+        eventType: OTP_DIAGNOSTIC_EVENT.PERSISTENCE_FAILED,
+        requestId: correlation.requestId,
+      });
+      throw error;
+    }
   }
 
   async close() {
@@ -209,12 +328,17 @@ export class SecureOtpService {
     }
   }
 
+  #emit(input) {
+    return emitOtpDiagnostic(input, this.diagnosticSink);
+  }
+
   #identity(payload) {
     return this.tokenService.identity(`${payload.userId}:${payload.purpose}:${payload.recipient}`);
   }
 
   #challengeKey(identity) { return `otp:challenge:${identity}`; }
   #cooldownKey(identity) { return `otp:cooldown:${identity}`; }
+  #verifiedProofKey(identity) { return `otp:verified:${identity}`; }
   #messageKey(messageId) {
     return `otp:message:${this.tokenService.identity(`meta-message:${messageId}`)}`;
   }
