@@ -30,7 +30,14 @@ export function applySecurity(app) {
   }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
   app.use(cookieParser());
-  app.use(mongoSanitize());
+  const sanitizeRequest = mongoSanitize();
+  const whatsappVerificationPath = `/api/${env.API_VERSION}/webhooks/whatsapp`;
+  app.use((req, res, next) => {
+    const isWhatsAppVerification = req.method === 'GET'
+      && (req.path === whatsappVerificationPath || req.path === `${whatsappVerificationPath}/`);
+    if (isWhatsAppVerification) return next();
+    return sanitizeRequest(req, res, next);
+  });
   app.use(hpp());
   app.use(compression({
     filter(req, res) {
