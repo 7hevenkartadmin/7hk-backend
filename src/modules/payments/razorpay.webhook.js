@@ -4,8 +4,7 @@ import { env } from '../../config/env.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { Order } from '../orders/order.model.js';
 import { Payment } from './payment.model.js';
-import { PaymentIntent } from './paymentIntent.model.js';
-import { applyRazorpayWebhookPayment } from './payment.service.js';
+import { applyRazorpayRefund, applyRazorpayWebhookPayment, initiateOrderRefund } from './payment.service.js';
 import { PaymentWebhookEvent } from './paymentWebhookEvent.model.js';
 
 function timingSafeSignature(expected, received) {
@@ -25,42 +24,29 @@ export function extractRazorpayWebhookPayment(payload) {
   return payload?.payload?.payment?.entity || null;
 }
 
-async function applyRefund(refund) {
-  if (!refund?.payment_id || !Number.isFinite(Number(refund.amount))) return;
-  const payment = await Payment.findOne({ providerPaymentId: refund.payment_id });
-  if (!payment) {
-    await PaymentIntent.updateOne(
-      { providerPaymentId: refund.payment_id, status: { $nin: ['consumed'] } },
-      { $set: { status: 'refunded', providerStatus: 'refunded', refundId: refund.id, refundStatus: refund.status }, $unset: { activeDedupeKey: 1 } },
-    );
-    return;
-  }
-  payment.amountRefunded = Math.min(payment.amount, Number(payment.amountRefunded || 0) + Number(refund.amount) / 100);
-  payment.status = payment.amountRefunded >= payment.amount ? 'refunded' : 'partially_refunded';
-  await payment.save();
-  await Order.updateOne(
-    { _id: payment.order, paymentStatus: { $ne: 'refunded' } },
-    { $set: { paymentStatus: payment.status } },
-  );
-  await PaymentIntent.updateOne(
-    { providerPaymentId: refund.payment_id },
-    { $set: { providerStatus: payment.status, refundId: refund.id, refundStatus: refund.status } },
-  );
+export async function applyRefund(refund) {
+  return applyRazorpayRefund(refund);
 }
 
-async function processWebhook(payload) {
+export async function processWebhook(payload) {
   const payment = extractRazorpayWebhookPayment(payload);
   if (['payment.authorized', 'payment.captured', 'payment.failed', 'order.paid'].includes(payload.event) && payment) {
     const intent = await applyRazorpayWebhookPayment(payment);
     if (intent && payment.status === 'captured') {
       await Payment.updateOne(
-        { providerPaymentId: payment.id },
+        { providerPaymentId: payment.id, status: { $in: ['created', 'authorized'] } },
         { $set: { status: 'captured' } },
       );
       await Order.updateOne(
-        { paymentIntent: intent._id, paymentStatus: { $ne: 'paid' } },
+        { paymentIntent: intent._id, status: { $ne: 'cancelled' }, paymentStatus: 'pending' },
         { $set: { paymentStatus: 'paid' } },
       );
+      const cancelledOrder = await Order.findOne({
+        paymentIntent: intent._id,
+        status: 'cancelled',
+        paymentStatus: { $ne: 'refunded' },
+      });
+      if (cancelledOrder) await initiateOrderRefund(cancelledOrder, 'LATE_CAPTURE_CANCELLED');
     }
     return Boolean(intent);
   }

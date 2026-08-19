@@ -52,14 +52,17 @@ test('token hashing is deterministic and does not expose raw token', () => {
   assert.notEqual(hashToken(token), token);
 });
 
-test('payment cart hash changes when coupon, quantity, total, or delivery address changes', () => {
+test('payment cart hash changes when coupon, quantity, total, delivery address, or slot changes', () => {
   const items = [{ productId: '507f1f77bcf86cd799439011', quantity: 2 }];
-  const baseHash = createCartHash(items, 'FRESH50', 250, '507f1f77bcf86cd799439012');
+  const addressId = '507f1f77bcf86cd799439012';
+  const slotId = '507f1f77bcf86cd799439014';
+  const baseHash = createCartHash(items, 'FRESH50', 250, addressId, slotId);
 
-  assert.notEqual(baseHash, createCartHash(items, 'SAVE10', 250, '507f1f77bcf86cd799439012'));
-  assert.notEqual(baseHash, createCartHash([{ ...items[0], quantity: 3 }], 'FRESH50', 250, '507f1f77bcf86cd799439012'));
-  assert.notEqual(baseHash, createCartHash(items, 'FRESH50', 251, '507f1f77bcf86cd799439012'));
-  assert.notEqual(baseHash, createCartHash(items, 'FRESH50', 250, '507f1f77bcf86cd799439013'));
+  assert.notEqual(baseHash, createCartHash(items, 'SAVE10', 250, addressId, slotId));
+  assert.notEqual(baseHash, createCartHash([{ ...items[0], quantity: 3 }], 'FRESH50', 250, addressId, slotId));
+  assert.notEqual(baseHash, createCartHash(items, 'FRESH50', 251, addressId, slotId));
+  assert.notEqual(baseHash, createCartHash(items, 'FRESH50', 250, '507f1f77bcf86cd799439013', slotId));
+  assert.notEqual(baseHash, createCartHash(items, 'FRESH50', 250, addressId, '507f1f77bcf86cd799439015'));
 });
 
 test('razorpay signature verification rejects tampered payload when secret is configured', () => {

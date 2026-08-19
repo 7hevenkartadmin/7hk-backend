@@ -1,4 +1,4 @@
-{
+ {
   "name": "7heaven-backend",
   "version": "1.0.0",
   "description": "Industry-grade modular monolith API for the 7Heven grocery platform.",
@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "seed": "node src/scripts/seed.js",
     "migrate:inventory": "node src/scripts/migrate-inventory.js",
+    "migrate:products": "node src/scripts/normalize-products.js",
     "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",
     "test:backend": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",
     "test:api": "node --import ./tests/setup-env.js --test tests/api.integration.test.js",

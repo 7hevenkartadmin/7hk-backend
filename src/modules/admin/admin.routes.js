@@ -11,7 +11,7 @@ import { AuditLog } from '../audit/audit.model.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { auditLogsQuerySchema, adminOrdersQuerySchema, dashboardStatsQuerySchema } from './admin.validation.js';
-import { getDashboardStats, listAdminOrders } from './admin.service.js';
+import { buildInventoryDashboardPipeline, getDashboardStats, listAdminOrders } from './admin.service.js';
 import { parseStoreDate, todayStoreRange } from '../../shared/utils/storeDate.js';
 
 export const adminRoutes = Router();
@@ -33,8 +33,8 @@ adminRoutes.patch('/customers/:id/status', authorize('admin'), asyncHandler(asyn
 }));
 
 adminRoutes.get('/inventory/low-stock', asyncHandler(async (_req, res) => {
-  const products = await Product.find({ stock: { $lt: env.LOW_STOCK_THRESHOLD }, isActive: true }).sort({ stock: 1 });
-  ok(res, { products }, 'Low stock products loaded');
+  const rows = await Product.aggregate(buildInventoryDashboardPipeline(env.LOW_STOCK_THRESHOLD, 100));
+  ok(res, { products: rows[0]?.lowStockItems || [] }, 'Low stock variants loaded');
 }));
 
 adminRoutes.get('/dashboard/stats', validate(dashboardStatsQuerySchema, 'query'), asyncHandler(async (req, res) => {

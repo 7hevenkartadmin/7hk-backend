@@ -44,7 +44,11 @@ test('online order schema requires Razorpay payment proof', () => {
 });
 
 test('Razorpay order creation requires a saved address and rejects client-supplied distance', () => {
-  const base = { items: [{ productId: '507f1f77bcf86cd799439011', quantity: 1 }] };
+  const base = {
+    items: [{ productId: '507f1f77bcf86cd799439011', quantity: 1 }],
+    slotId: '507f1f77bcf86cd799439013',
+  };
   assert.equal(createRazorpayOrderSchema.safeParse({ ...base, addressId: '507f1f77bcf86cd799439012' }).success, true);
   assert.equal(createRazorpayOrderSchema.safeParse({ ...base, addressId: '507f1f77bcf86cd799439012', distanceFromStoreKm: 0 }).success, false);
+  assert.equal(createRazorpayOrderSchema.safeParse({ items: base.items, addressId: '507f1f77bcf86cd799439012' }).success, false);
 });

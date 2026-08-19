@@ -10,6 +10,8 @@ const paymentSchema = new mongoose.Schema({
   currency: { type: String, default: 'INR' },
   status: { type: String, enum: ['created', 'authorized', 'captured', 'failed', 'refunded', 'partially_refunded'], default: 'created' },
   amountRefunded: { type: Number, min: 0, default: 0 },
+  processedRefundIds: { type: [String], default: [] },
+  refundReason: String,
   raw: mongoose.Schema.Types.Mixed,
 }, { timestamps: true });
 

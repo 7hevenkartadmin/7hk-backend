@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { adminOrdersQuerySchema } from '../src/modules/admin/admin.validation.js';
-import { buildAdminOrderFilter, getDashboardStats, listAdminOrders } from '../src/modules/admin/admin.service.js';
+import { buildAdminOrderFilter, buildInventoryDashboardPipeline, getDashboardStats, listAdminOrders, REVENUE_FILTER } from '../src/modules/admin/admin.service.js';
 import { Product } from '../src/modules/catalog/product.model.js';
 import { listProducts } from '../src/modules/catalog/catalog.service.js';
 import { Order } from '../src/modules/orders/order.model.js';
@@ -87,13 +87,14 @@ test('admin products apply server pagination and visibility/stock filters in Mon
     assert.deepEqual(calls.find(([name]) => name === 'limit'), ['limit', 20]);
     const filter = calls.find(([name]) => name === 'find')[1];
     assert.equal(filter.isActive, false);
-    assert.equal(filter.availableStock, 0);
+    assert.ok(filter.$expr.$anyElementTrue.$map);
+    assert.equal(JSON.stringify(filter.$expr).includes('$$variant.reservedStock'), true);
   });
 });
 
-test('dashboard statistics use database counts, aggregation, and exactly five recent orders', async () => {
+test('dashboard statistics count active variants and return separate inventory contracts', async () => {
   const orderCounts = [1248, 18, 7, 1180, 61];
-  const productCounts = [423, 397, 12, 31];
+  const productCounts = [423, 397];
   let orderCountIndex = 0;
   let productCountIndex = 0;
   let aggregateIndex = 0;
@@ -104,6 +105,11 @@ test('dashboard statistics use database counts, aggregation, and exactly five re
     [{ revenue: 12450, orders: 18, customers: ['a', 'b'] }],
     [{ _id: 'Vegetables', value: 30 }], [{ _id: 'Tomato', sales: 20 }], [{ _id: '10', orders: 8 }],
   ];
+  const inventoryResult = [{
+    counts: [{ activeVariants: 460, outOfStock: 12, lowStock: 31, healthy: 417 }],
+    outOfStockItems: [{ productId: 'p1', variantId: 'v1', name: 'Tomato', variantTitle: '1 kg', sku: 'TOM-1', unit: '1 kg', availableStock: 0, status: 'out_of_stock' }],
+    lowStockItems: [{ productId: 'p2', variantId: 'v2', name: 'Rice', variantTitle: '5 kg', sku: 'RICE-5', unit: '5 kg', availableStock: 2, status: 'low_stock' }],
+  }];
   const recentQuery = {
     sort() { return this; },
     limit(value) { recentLimit = value; return this; },
@@ -113,15 +119,45 @@ test('dashboard statistics use database counts, aggregation, and exactly five re
     { object: Order, method: 'countDocuments', implementation: async () => orderCounts[orderCountIndex++] },
     { object: Product, method: 'countDocuments', implementation: async () => productCounts[productCountIndex++] },
     { object: Order, method: 'aggregate', implementation: async () => aggregates[aggregateIndex++] },
-    { object: Product, method: 'aggregate', implementation: async () => [{ name: 'Tomato', stock: 2 }] },
+    { object: Product, method: 'aggregate', implementation: async (pipeline) => { assert.deepEqual(pipeline, buildInventoryDashboardPipeline()); return inventoryResult; } },
     { object: Order, method: 'find', implementation: () => recentQuery },
   ], async () => {
     const stats = await getDashboardStats('weekly');
     assert.deepEqual(stats.orders, { total: 1248, today: 18, pending: 7, delivered: 1180, cancelled: 61 });
-    assert.deepEqual(stats.products, { total: 423, active: 397, outOfStock: 12, lowStock: 31, threshold: 20 });
+    assert.deepEqual(stats.products, {
+      total: 423,
+      active: 397,
+      activeVariants: 460,
+      outOfStock: 12,
+      lowStock: 31,
+      healthy: 417,
+      threshold: 20,
+    });
+    assert.equal(stats.outOfStockItems[0].status, 'out_of_stock');
+    assert.equal(stats.lowStockItems[0].availableStock, 2);
     assert.equal(stats.revenue.total, 845620);
     assert.equal(stats.recentOrders.length, 5);
     assert.equal(recentLimit, 5);
     assert.equal(stats.analytics.averageOrderValue, 692);
+  });
+});
+
+test('dashboard inventory pipeline excludes inactive variants and limits only positive low stock', () => {
+  const pipeline = buildInventoryDashboardPipeline(20, 15);
+  assert.deepEqual(pipeline[2], { $match: { 'variants.isActive': true } });
+  const facet = pipeline[4].$facet;
+  assert.equal(facet.outOfStockItems.some((stage) => stage.$limit), false);
+  assert.deepEqual(facet.lowStockItems[0], { $match: { skuAvailable: { $gt: 0, $lt: 20 } } });
+  assert.deepEqual(facet.lowStockItems.find((stage) => stage.$limit), { $limit: 15 });
+  const projection = facet.lowStockItems.at(-1).$project;
+  for (const field of ['productId', 'variantId', 'name', 'variantTitle', 'sku', 'unit', 'availableStock', 'status']) {
+    assert.ok(Object.hasOwn(projection, field));
+  }
+});
+
+test('admin revenue includes paid and partially refunded non-cancelled orders only', () => {
+  assert.deepEqual(REVENUE_FILTER, {
+    status: { $ne: 'cancelled' },
+    paymentStatus: { $in: ['paid', 'partially_refunded'] },
   });
 });

@@ -2,15 +2,19 @@ import { createApp } from './app.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { env } from './config/env.js';
 import { closeOtpModule, startOtpNotificationWorker } from './modules/auth/otp.module.js';
+import { startExpiredReservationSweep } from './modules/payments/payment.service.js';
 
 const app = createApp();
 let otpNotificationWorker;
+let reservationSweep;
 
 try {
   await connectDatabase();
   otpNotificationWorker = startOtpNotificationWorker();
+  reservationSweep = startExpiredReservationSweep();
 } catch (error) {
-  console.error('Failed to connect to MongoDB during startup:', error);
+  console.error('Failed to initialize API dependencies during startup:', error);
+  await disconnectDatabase().catch(() => {});
   process.exit(1);
 }
 
@@ -26,10 +30,11 @@ async function shutdown(signal) {
   }, 10000);
 
   server.close(async () => {
-    clearTimeout(shutdownTimeout);
+    if (reservationSweep) await reservationSweep.close();
     if (otpNotificationWorker) await otpNotificationWorker.close();
     await closeOtpModule();
     await disconnectDatabase();
+    clearTimeout(shutdownTimeout);
     process.exit(0);
   });
 }

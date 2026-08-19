@@ -6,7 +6,7 @@ import { Order } from '../orders/order.model.js';
 
 export const REVENUE_FILTER = {
   status: { $ne: 'cancelled' },
-  paymentStatus: { $nin: ['failed', 'refunded'] },
+  paymentStatus: { $in: ['paid', 'partially_refunded'] },
 };
 
 function escapeRegex(value) {
@@ -17,7 +17,6 @@ export function buildAdminOrderFilter(query) {
   const filter = {};
   if (query.status) filter.status = query.status;
   if (query.paymentStatus) filter.paymentStatus = query.paymentStatus;
-
   if (query.date) {
     const range = parseStoreDate(query.date);
     filter.createdAt = { $gte: range.start, $lt: range.end };
@@ -26,7 +25,6 @@ export function buildAdminOrderFilter(query) {
     if (query.from) filter.createdAt.$gte = parseStoreDate(query.from).start;
     if (query.to) filter.createdAt.$lt = parseStoreDate(query.to).end;
   }
-
   if (query.search) {
     const pattern = new RegExp(`^${escapeRegex(query.search)}`, 'i');
     filter.$or = [
@@ -67,17 +65,75 @@ function revenueDateFormat(period) {
   return '%Y-%m-%d';
 }
 
+export function buildInventoryDashboardPipeline(threshold = env.LOW_STOCK_THRESHOLD, lowStockLimit = 20) {
+  return [
+    { $match: { isActive: true } },
+    { $unwind: '$variants' },
+    { $match: { 'variants.isActive': true } },
+    {
+      $addFields: {
+        skuAvailable: {
+          $max: [0, { $subtract: [{ $ifNull: ['$variants.stock', 0] }, { $ifNull: ['$variants.reservedStock', 0] }] }],
+        },
+      },
+    },
+    {
+      $facet: {
+        counts: [{
+          $group: {
+            _id: null,
+            activeVariants: { $sum: 1 },
+            outOfStock: { $sum: { $cond: [{ $eq: ['$skuAvailable', 0] }, 1, 0] } },
+            lowStock: { $sum: { $cond: [{ $and: [{ $gt: ['$skuAvailable', 0] }, { $lte: ['$skuAvailable', threshold] }] }, 1, 0] } },
+            healthy: { $sum: { $cond: [{ $gt: ['$skuAvailable', threshold] }, 1, 0] } },
+          },
+        }],
+        outOfStockItems: [
+          { $match: { skuAvailable: 0 } },
+          { $sort: { name: 1, 'variants.title': 1 } },
+          { $project: {
+            _id: 0,
+            productId: '$_id',
+            variantId: '$variants._id',
+            name: 1,
+            variantTitle: '$variants.title',
+            sku: '$variants.sku',
+            unit: '$variants.unit',
+            availableStock: '$skuAvailable',
+            status: { $literal: 'out_of_stock' },
+          } },
+        ],
+        lowStockItems: [
+          { $match: { skuAvailable: { $gt: 0, $lt: threshold } } },
+          { $sort: { skuAvailable: 1, name: 1, 'variants.title': 1 } },
+          { $limit: lowStockLimit },
+          { $project: {
+            _id: 0,
+            productId: '$_id',
+            variantId: '$variants._id',
+            name: 1,
+            variantTitle: '$variants.title',
+            sku: '$variants.sku',
+            unit: '$variants.unit',
+            availableStock: '$skuAvailable',
+            status: { $literal: 'low_stock' },
+          } },
+        ],
+      },
+    },
+  ];
+}
+
 export async function getDashboardStats(period = 'weekly') {
   const today = todayStoreRange();
   const activeFilter = { isActive: true };
-  const lowStockFilter = { ...activeFilter, availableStock: { $gt: 0, $lt: env.LOW_STOCK_THRESHOLD } };
   const revenueStart = revenuePeriodStart(period);
   const periodRevenueFilter = { ...REVENUE_FILTER, createdAt: { $gte: revenueStart } };
   const [
     totalOrders, todayOrders, pendingOrders, deliveredOrders, cancelledOrders,
     totalRevenueRows, todayRevenueRows, totalProducts, activeProducts,
-    outOfStockProducts, lowStockProducts, recentOrders, lowStockItems, revenueRows,
-    periodSummaryRows, categoryRows, topProductRows, hourlyRows,
+    inventoryRows, recentOrders, revenueRows, periodSummaryRows,
+    categoryRows, topProductRows, hourlyRows,
   ] = await Promise.all([
     Order.countDocuments(),
     Order.countDocuments({ createdAt: { $gte: today.start, $lt: today.end } }),
@@ -88,19 +144,8 @@ export async function getDashboardStats(period = 'weekly') {
     Order.aggregate([{ $match: { ...REVENUE_FILTER, createdAt: { $gte: today.start, $lt: today.end } } }, { $group: { _id: null, value: { $sum: '$total' } } }]),
     Product.countDocuments(),
     Product.countDocuments(activeFilter),
-    Product.countDocuments({ ...activeFilter, availableStock: 0 }),
-    Product.countDocuments(lowStockFilter),
+    Product.aggregate(buildInventoryDashboardPipeline()),
     Order.find().sort({ createdAt: -1 }).limit(5).lean(),
-    Product.aggregate([
-      { $match: activeFilter },
-      { $unwind: '$variants' },
-      { $match: { 'variants.isActive': true } },
-      { $addFields: { skuAvailable: { $max: [0, { $subtract: ['$variants.stock', { $ifNull: ['$variants.reservedStock', 0] }] }] } } },
-      { $match: { skuAvailable: { $lt: env.LOW_STOCK_THRESHOLD } } },
-      { $sort: { skuAvailable: 1, name: 1 } },
-      { $limit: 8 },
-      { $project: { name: 1, image: 1, stock: '$skuAvailable', unit: '$variants.unit', sku: '$variants.sku', variantId: '$variants._id' } },
-    ]),
     Order.aggregate([
       { $match: periodRevenueFilter },
       { $group: { _id: { $dateToString: { format: revenueDateFormat(period), date: '$createdAt', timezone: 'Asia/Kolkata' } }, revenue: { $sum: '$total' }, orders: { $sum: 1 } } },
@@ -112,11 +157,30 @@ export async function getDashboardStats(period = 'weekly') {
     Order.aggregate([{ $match: periodRevenueFilter }, { $group: { _id: { $dateToString: { format: '%H', date: '$createdAt', timezone: 'Asia/Kolkata' } }, orders: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
   ]);
 
+  const inventory = inventoryRows[0] || {};
+  const variantCounts = inventory.counts?.[0] || { activeVariants: 0, outOfStock: 0, lowStock: 0, healthy: 0 };
+  const outOfStockItems = inventory.outOfStockItems || [];
+  const lowStockItems = inventory.lowStockItems || [];
+
   return {
     orders: { total: totalOrders, today: todayOrders, pending: pendingOrders, delivered: deliveredOrders, cancelled: cancelledOrders },
-    revenue: { total: totalRevenueRows[0]?.value || 0, today: todayRevenueRows[0]?.value || 0, rule: 'Excludes cancelled orders and failed/refunded payments', series: revenueRows.map((row) => ({ day: row._id, label: row._id, revenue: row.revenue, orders: row.orders })) },
-    products: { total: totalProducts, active: activeProducts, outOfStock: outOfStockProducts, lowStock: lowStockProducts, threshold: env.LOW_STOCK_THRESHOLD },
+    revenue: {
+      total: totalRevenueRows[0]?.value || 0,
+      today: todayRevenueRows[0]?.value || 0,
+      rule: 'Includes paid and partially refunded non-cancelled orders',
+      series: revenueRows.map((row) => ({ day: row._id, label: row._id, revenue: row.revenue, orders: row.orders })),
+    },
+    products: {
+      total: totalProducts,
+      active: activeProducts,
+      activeVariants: variantCounts.activeVariants,
+      outOfStock: variantCounts.outOfStock,
+      lowStock: variantCounts.lowStock,
+      healthy: variantCounts.healthy,
+      threshold: env.LOW_STOCK_THRESHOLD,
+    },
     recentOrders,
+    outOfStockItems,
     lowStockItems,
     analytics: {
       orders: periodSummaryRows[0]?.orders || 0,

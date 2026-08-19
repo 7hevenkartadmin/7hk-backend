@@ -8,14 +8,21 @@ export async function dashboardSummary() {
     Order.countDocuments(),
     Order.aggregate([{ $match: { paymentStatus: { $in: ['paid', 'pending'] }, status: { $ne: 'cancelled' } } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
     User.countDocuments({ role: 'customer' }),
-    Product.countDocuments({ stock: { $lt: env.LOW_STOCK_THRESHOLD }, isActive: true }),
+    Product.aggregate([
+      { $match: { isActive: true } },
+      { $unwind: '$variants' },
+      { $match: { 'variants.isActive': true } },
+      { $addFields: { available: { $max: [0, { $subtract: [{ $ifNull: ['$variants.stock', 0] }, { $ifNull: ['$variants.reservedStock', 0] }] }] } } },
+      { $match: { available: { $gt: 0, $lt: env.LOW_STOCK_THRESHOLD } } },
+      { $count: 'value' },
+    ]),
   ]);
 
   return {
     totalOrders: orders,
     revenue: revenue[0]?.total || 0,
     customers,
-    lowStock,
+    lowStock: lowStock[0]?.value || 0,
   };
 }
 

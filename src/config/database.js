@@ -14,6 +14,14 @@ const REQUIRED_PRODUCTION_INDEXES = [
     name: 'payment_intent_provider_payment_unique',
     partialFilterExpression: { providerPaymentId: { $type: 'string' } },
   }],
+  ['paymentintents', { providerOrderId: 1 }, {
+    name: 'payment_intent_provider_order_unique',
+    partialFilterExpression: { providerOrderId: { $type: 'string' } },
+  }],
+  ['paymentintents', { 'reservation.state': 1, 'reservation.expiresAt': 1 }, {
+    name: 'payment_intent_reservation_expiry',
+    unique: false,
+  }],
   ['payments', { providerOrderId: 1 }, {
     name: 'payment_provider_order_unique',
     partialFilterExpression: { providerOrderId: { $type: 'string' } },
@@ -28,6 +36,12 @@ const REQUIRED_PRODUCTION_INDEXES = [
   }],
   ['paymentwebhookevents', { eventId: 1 }, { name: 'razorpay_webhook_event_unique' }],
   ['inventorymovements', { idempotencyKey: 1 }, { name: 'inventory_movement_idempotency_unique' }],
+  ['orders', { orderNumber: 1 }, { name: 'order_number_unique' }],
+  ['products', { slug: 1 }, { name: 'product_slug_unique' }],
+  ['products', { sku: 1 }, { name: 'product_sku_unique' }],
+  ['products', { 'variants.sku': 1 }, { name: 'product_variant_sku_unique', sparse: true }],
+  ['coupons', { code: 1 }, { name: 'coupon_code_unique' }],
+  ['deliveryslots', { date: 1, startsAt: 1, serviceArea: 1 }, { name: 'delivery_slot_unique' }],
   ['logincompletions', { proofDigest: 1 }, { name: 'login_completion_proof_digest_unique' }],
 ];
 
@@ -49,16 +63,16 @@ async function ensureProductionIndexes(database) {
     const collection = database.collection(collectionName);
     const existing = (await listIndexes(collection)).find((index) => hasSameKey(index.key, key));
 
-    // An older deployment may have created the same index under Mongo's default
-    // name. Reusing it avoids IndexOptionsConflict on every application restart.
+    const shouldBeUnique = options.unique !== false;
     if (existing) {
-      if (!existing.unique) {
-        throw new Error(`Required unique index is non-unique: ${collectionName}.${existing.name}`);
+      if (Boolean(existing.unique) !== shouldBeUnique) {
+        throw new Error(`Required index uniqueness mismatch: ${collectionName}.${existing.name}`);
       }
       continue;
     }
 
-    await collection.createIndex(key, { ...options, unique: true });
+    const createOptions = { ...options, unique: shouldBeUnique };
+    await collection.createIndex(key, createOptions);
   }
 }
 

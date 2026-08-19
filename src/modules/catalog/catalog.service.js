@@ -5,6 +5,7 @@ import { getPagination, paged } from '../../shared/utils/pagination.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { publishInventoryChange } from '../../shared/realtime/inventory.events.js';
 import { env } from '../../config/env.js';
+import { maxOrderableQuantity, netAvailableStock } from '../../shared/utils/inventory.js';
 
 const sortMap = {
   popularity: { popularity: -1, createdAt: -1 },
@@ -13,7 +14,7 @@ const sortMap = {
   discount: { discount: -1 },
   newest: { createdAt: -1 },
   name_asc: { name: 1 },
-  stock_asc: { stock: 1, name: 1 },
+  stock_asc: { availableStock: 1, name: 1 },
 };
 
 function escapeRegex(value) {
@@ -30,19 +31,43 @@ function defaultVariantIndex(variants = []) {
 export function inventorySummary(product) {
   const variants = Array.isArray(product?.variants) ? product.variants : [];
   const active = variants.filter((variant) => variant.isActive !== false);
-  if (active.length === 0) {
+  if (variants.length === 0) {
     const onHand = Number(product?.stock || 0);
     const reserved = Number(product?.reservedStock || 0);
-    return { totalStock: onHand, reservedStock: reserved, availableStock: Math.max(0, onHand - reserved) };
+    return { totalStock: onHand, reservedStock: reserved, availableStock: netAvailableStock(onHand, reserved) };
   }
+  if (active.length === 0) return { totalStock: 0, reservedStock: 0, availableStock: 0 };
   return active.reduce((summary, variant) => {
     const onHand = Number(variant.stock || 0);
     const reserved = Number(variant.reservedStock || 0);
     summary.totalStock += onHand;
     summary.reservedStock += reserved;
-    summary.availableStock += Math.max(0, onHand - reserved);
+    summary.availableStock += netAvailableStock(onHand, reserved);
     return summary;
   }, { totalStock: 0, reservedStock: 0, availableStock: 0 });
+}
+
+export function variantStockStatusExpression(status, threshold = env.LOW_STOCK_THRESHOLD) {
+  const available = {
+    $max: [0, {
+      $subtract: [
+        { $ifNull: ['$$variant.stock', 0] },
+        { $ifNull: ['$$variant.reservedStock', 0] },
+      ],
+    }],
+  };
+  const statusMatch = status === 'out'
+    ? { $eq: [available, 0] }
+    : { $and: [{ $gt: [available, 0] }, { $lt: [available, threshold] }] };
+  return {
+    $anyElementTrue: {
+      $map: {
+        input: { $ifNull: ['$variants', []] },
+        as: 'variant',
+        in: { $and: [{ $eq: ['$$variant.isActive', true] }, statusMatch] },
+      },
+    },
+  };
 }
 
 async function resolveCategoryHierarchy(payload, existingProduct = null) {
@@ -99,17 +124,25 @@ export function toPublicProduct(product) {
   const summary = inventorySummary(item);
   const defaultVariant = item.variants?.find((variant) => variant.isDefault && variant.isActive !== false)
     || item.variants?.find((variant) => variant.isActive !== false);
-  item.isAvailable = summary.availableStock > 0;
+  const defaultMaximum = defaultVariant
+    ? maxOrderableQuantity(defaultVariant.stock, defaultVariant.reservedStock, { isActive: defaultVariant.isActive !== false })
+    : item.variants?.length
+      ? 0
+      : maxOrderableQuantity(item.stock, item.reservedStock, { isActive: item.isActive !== false });
+  item.isAvailable = item.isActive !== false && summary.availableStock > 0;
+  item.maxOrderableQuantity = defaultMaximum;
   item.defaultVariantId = defaultVariant?._id;
-  item.defaultVariantAvailable = defaultVariant
-    ? Number(defaultVariant.stock || 0) - Number(defaultVariant.reservedStock || 0) > 0
-    : summary.availableStock > 0;
+  item.defaultVariantAvailable = defaultMaximum > 0;
+  item.defaultVariantMaxOrderableQuantity = defaultMaximum;
   delete item.stock;
   delete item.reservedStock;
   delete item.totalStock;
   delete item.availableStock;
   item.variants = Array.isArray(item.variants) ? item.variants.map((variant) => {
-    const publicVariant = { ...variant, isAvailable: Number(variant.stock || 0) - Number(variant.reservedStock || 0) > 0 };
+    const safeMaximum = maxOrderableQuantity(variant.stock, variant.reservedStock, {
+      isActive: item.isActive !== false && variant.isActive !== false,
+    });
+    const publicVariant = { ...variant, isAvailable: safeMaximum > 0, maxOrderableQuantity: safeMaximum };
     delete publicVariant.stock;
     delete publicVariant.reservedStock;
     return publicVariant;
@@ -176,8 +209,8 @@ export async function listProducts(query, options = {}) {
   if (query.featured !== undefined) filter.isFeatured = query.featured;
   if (query.active === 'active') filter.isActive = true;
   if (query.active === 'inactive') filter.isActive = false;
-  if (query.stockStatus === 'out') filter.availableStock = 0;
-  if (query.stockStatus === 'low') filter.availableStock = { $gt: 0, $lt: env.LOW_STOCK_THRESHOLD };
+  if (query.stockStatus === 'out') filter.$expr = variantStockStatusExpression('out');
+  if (query.stockStatus === 'low') filter.$expr = variantStockStatusExpression('low');
   if (query.minPrice !== undefined || query.maxPrice !== undefined) {
     filter.price = {};
     if (query.minPrice !== undefined) filter.price.$gte = query.minPrice;

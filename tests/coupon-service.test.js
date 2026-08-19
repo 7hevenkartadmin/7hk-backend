@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Coupon } from '../src/modules/coupons/coupon.model.js';
-import { calculateDiscount, createCoupon, listActiveCouponOffers, updateCoupon, validateCoupon } from '../src/modules/coupons/coupon.service.js';
+import {
+  calculateDiscount,
+  claimCoupon,
+  consumeCouponReservation,
+  createCoupon,
+  listActiveCouponOffers,
+  releaseCouponReservation,
+  restoreConsumedCoupon,
+  updateCoupon,
+  validateCoupon,
+} from '../src/modules/coupons/coupon.service.js';
 
 function withStub(object, method, implementation, callback) {
   const original = object[method];
@@ -99,17 +109,17 @@ test('createCoupon persists an uppercase code', async () => withStub(
 ));
 
 test('updateCoupon persists admin status changes and reports missing coupons', async () => {
-  await withStub(Coupon, 'findByIdAndUpdate', async (id, payload, options) => {
-    assert.equal(id, 'coupon-1');
+  await withStub(Coupon, 'findOneAndUpdate', async (filter, payload, options) => {
+    assert.deepEqual(filter, { _id: 'coupon-1' });
     assert.deepEqual(payload, { isActive: false });
     assert.deepEqual(options, { new: true, runValidators: true });
-    return { _id: id, ...payload };
+    return { _id: filter._id, ...payload };
   }, async () => {
     const coupon = await updateCoupon('coupon-1', { isActive: false });
     assert.equal(coupon.isActive, false);
   });
 
-  await withStub(Coupon, 'findByIdAndUpdate', async () => null, async () => {
+  await withStub(Coupon, 'findOneAndUpdate', async () => null, async () => {
     await assert.rejects(() => updateCoupon('missing', { isActive: false }), { code: 'COUPON_NOT_FOUND' });
   });
 });
@@ -141,4 +151,50 @@ test('listActiveCouponOffers queries active usable coupons and caps the public l
     assert.deepEqual(calls[1], ['sort', { value: -1, createdAt: -1 }]);
     assert.deepEqual(calls[2], ['limit', 20]);
   });
+});
+
+test('coupon usage limits count committed and reserved occupancy with legacy reservations defaulting to zero', async () => {
+  const active = {
+    startsAt: new Date(Date.now() - 60_000),
+    endsAt: new Date(Date.now() + 60_000),
+    minOrderValue: 0,
+    usageLimit: 10,
+    usedCount: 8,
+    reservedCount: 2,
+  };
+  await withStub(Coupon, 'findOne', async () => active, async () => {
+    await assert.rejects(() => validateCoupon('combined', 500), { code: 'COUPON_LIMIT_REACHED' });
+  });
+  await withStub(Coupon, 'findOne', async () => ({
+    ...active,
+    type: 'flat',
+    value: 25,
+    usedCount: 9,
+    reservedCount: undefined,
+  }), async () => {
+    const result = await validateCoupon('legacy', 500);
+    assert.equal(result.discount, 25);
+  });
+});
+
+test('coupon claim, consume, release, and restore use phase-specific atomic counter mutations', async () => {
+  const calls = [];
+  await withStub(Coupon, 'findOneAndUpdate', async (filter, update, options) => {
+    calls.push({ filter, update, options });
+    return { _id: 'coupon-1' };
+  }, async () => {
+    await claimCoupon('coupon-1', 500, 'session');
+    await consumeCouponReservation('coupon-1', 'session');
+    await releaseCouponReservation('coupon-1', 'session');
+    await restoreConsumedCoupon('coupon-1', 'session');
+  });
+
+  assert.deepEqual(calls[0].update, { $inc: { reservedCount: 1 } });
+  assert.equal(calls[0].filter.$or[1].$expr.$lt[0].$add[1].$ifNull[1], 0);
+  assert.deepEqual(calls[1].filter, { _id: 'coupon-1', reservedCount: { $gt: 0 } });
+  assert.deepEqual(calls[1].update, { $inc: { reservedCount: -1, usedCount: 1 } });
+  assert.deepEqual(calls[2].update, { $inc: { reservedCount: -1 } });
+  assert.deepEqual(calls[3].filter, { _id: 'coupon-1', usedCount: { $gt: 0 } });
+  assert.deepEqual(calls[3].update, { $inc: { usedCount: -1 } });
+  assert.equal(calls.every(({ options }) => options.new === true && options.session === 'session'), true);
 });

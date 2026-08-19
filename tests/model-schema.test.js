@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import mongoose from "mongoose";
 import { Product } from "../src/modules/catalog/product.model.js";
+import { Coupon } from "../src/modules/coupons/coupon.model.js";
 import { Order } from "../src/modules/orders/order.model.js";
+import { Payment } from "../src/modules/payments/payment.model.js";
 import { User } from "../src/modules/users/user.model.js";
 
 const objectId = () => new mongoose.Types.ObjectId();
@@ -233,4 +235,51 @@ test("order model rejects invalid statuses, payments, totals, and item quantitie
   assert.ok(error.errors.paymentMethod);
   assert.ok(error.errors.paymentStatus);
   assert.ok(error.errors.status);
+});
+
+test("product model recomputes active variant stock aggregates and default mirrors", async () => {
+  const product = new Product({
+    name: "Aggregate Product",
+    slug: "aggregate-product",
+    category: "test",
+    mrp: 1,
+    price: 1,
+    unit: "legacy",
+    sku: "AGG-LEGACY",
+    variants: [
+      { title: "Default", unit: "1 pc", sku: "AGG-1", mrp: 10, price: 9, stock: 12, reservedStock: 4, isDefault: true, isActive: true },
+      { title: "Large", unit: "2 pc", sku: "AGG-2", mrp: 20, price: 18, stock: 7, reservedStock: 2, isActive: true },
+      { title: "Retired", unit: "3 pc", sku: "AGG-3", mrp: 30, price: 27, stock: 100, reservedStock: 0, isActive: false },
+    ],
+  });
+
+  await product.validate();
+
+  assert.equal(product.stock, 12);
+  assert.equal(product.reservedStock, 4);
+  assert.equal(product.totalStock, 19);
+  assert.equal(product.availableStock, 13);
+});
+
+test("coupon and payment refund ledgers apply safe legacy defaults", () => {
+  const coupon = new Coupon({
+    code: "SAFE10",
+    type: "flat",
+    value: 10,
+    startsAt: new Date("2026-01-01T00:00:00.000Z"),
+    endsAt: new Date("2027-01-01T00:00:00.000Z"),
+  });
+  const payment = new Payment({
+    order: objectId(),
+    provider: "razorpay",
+    amount: 100,
+    refundReason: "ORDER_CANCELLED",
+  });
+
+  assert.equal(coupon.validateSync(), undefined);
+  assert.equal(coupon.reservedCount, 0);
+  assert.equal(payment.validateSync(), undefined);
+  assert.equal(payment.amountRefunded, 0);
+  assert.deepEqual(payment.processedRefundIds, []);
+  assert.equal(payment.refundReason, "ORDER_CANCELLED");
 });

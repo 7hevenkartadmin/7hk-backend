@@ -2,11 +2,27 @@ import mongoose from 'mongoose';
 import { customAlphabet } from 'nanoid';
 import { Product } from '../catalog/product.model.js';
 import { Coupon } from '../coupons/coupon.model.js';
-import { validateCoupon } from '../coupons/coupon.service.js';
-import { reserveSlot } from '../delivery/delivery.service.js';
-import { completeRazorpayPaymentIntent, consumeRazorpayPaymentIntent, createCapturedRazorpayPaymentForOrder, createPaymentForOrder, getVerifiedPaymentIntentForOrder, refundUnfulfillablePayment } from '../payments/payment.service.js';
+import {
+  claimCoupon,
+  consumeCouponReservation,
+  restoreConsumedCoupon,
+  validateCoupon,
+} from '../coupons/coupon.service.js';
+import { releaseSlot, reserveSlot } from '../delivery/delivery.service.js';
+import {
+  completeRazorpayPaymentIntent,
+  consumeRazorpayPaymentIntent,
+  createCapturedRazorpayPaymentForOrder,
+  createPaymentForOrder,
+  getReservedSlotForIntent,
+  getVerifiedPaymentIntentForOrder,
+  initiateOrderRefund,
+  queueOrderRefund,
+  refundUnfulfillablePayment,
+} from '../payments/payment.service.js';
 import { sendOrderPlacedNotification, sendOrderStatusNotification } from '../notifications/notification.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { maxOrderableQuantity, netAvailableStock } from '../../shared/utils/inventory.js';
 import { publishInventoryChange } from '../../shared/realtime/inventory.events.js';
 import { publishOrderChange } from '../../shared/realtime/order.events.js';
 import { Order } from './order.model.js';
@@ -18,6 +34,12 @@ import { deliveryFeeForDistance, getCodSettings } from '../settings/settings.ser
 import { assertStoreAcceptingOrders, getStoreAvailability } from '../settings/storeAvailability.service.js';
 import { PaymentIntent } from '../payments/paymentIntent.model.js';
 import { deliveryOtpForOrder, matchesDeliveryOtp } from './delivery-otp.service.js';
+import {
+  consumeReservedInventory,
+  inventoryChanges,
+  restoreOrderInventory,
+  sellAvailableInventory,
+} from '../inventory/inventory.service.js';
 
 const orderId = customAlphabet('123456789ABCDEFGHJKLMNPQRSTUVWXYZ', 8);
 const allowedTransitions = {
@@ -50,26 +72,37 @@ function enforceDeliveryRadius(address) {
 
 function purchasableVariant(product, variantId) {
   if (!product.variants?.length) return null;
-  const variant = variantId ? product.variants.id(variantId) : product.variants.find((item) => item.isDefault);
+  const variant = variantId
+    ? product.variants.id(variantId)
+    : product.variants.find((item) => item.isDefault && item.isActive);
   if (!variant || !variant.isActive) throw new AppError(`${product.name} variant is unavailable`, 409, 'VARIANT_UNAVAILABLE');
   return variant;
 }
 
-async function hydrateItems(inputItems, session) {
+async function hydrateItems(inputItems, session, { checkAvailability = true } = {}) {
   const ids = inputItems.map((item) => item.productId);
-  const products = await Product.find({ _id: { $in: ids }, isActive: true }).session(session);
+  const query = Product.find({ _id: { $in: ids }, isActive: true });
+  if (session) query.session(session);
+  const products = await query;
   const byId = new Map(products.map((product) => [String(product._id), product]));
 
   return inputItems.map((item) => {
     const product = byId.get(item.productId);
     if (!product) throw new AppError('Product not found in cart', 404, 'PRODUCT_NOT_FOUND');
     const variant = purchasableVariant(product, item.variantId);
-    const availableStock = variant ? variant.stock : product.stock;
-    if (availableStock < item.quantity) throw new AppError(`${product.name} has only ${availableStock} left`, 409, 'INSUFFICIENT_STOCK');
+    const target = variant || product;
+    const available = netAvailableStock(target.stock, target.reservedStock);
+    const safeMaximum = maxOrderableQuantity(target.stock, target.reservedStock, { isActive: target.isActive !== false });
+    if (checkAvailability && available < item.quantity) {
+      throw new AppError(`${product.name} has only ${available} left`, 409, 'INSUFFICIENT_STOCK', {
+        maxOrderableQuantity: safeMaximum,
+      });
+    }
     return {
       product,
       variant,
       quantity: item.quantity,
+      maxOrderableQuantity: safeMaximum,
       price: variant?.price ?? product.price,
       mrp: variant?.mrp ?? product.mrp,
       taxRate: product.taxRate,
@@ -86,11 +119,11 @@ function applyCheckoutSnapshot(items, snapshot) {
     throw new AppError('Cart does not match the captured payment', 409, 'PAYMENT_INTENT_MISMATCH');
   }
   const snapshotByItem = new Map(snapshot.items.map((item) => [
-    item.productId + ':' + (item.variantId || ''),
+    `${item.productId}:${item.variantId || ''}`,
     item,
   ]));
   return items.map((item) => {
-    const key = String(item.product._id) + ':' + String(item.variant?._id || '');
+    const key = `${item.product._id}:${item.variant?._id || ''}`;
     const paidItem = snapshotByItem.get(key);
     if (!paidItem || Number(paidItem.quantity) !== Number(item.quantity)) {
       throw new AppError('Cart does not match the captured payment', 409, 'PAYMENT_INTENT_MISMATCH');
@@ -120,7 +153,20 @@ export async function quoteOrder(customer, payload) {
     : defaultDeliveryFee(subtotalOnly);
   const totals = calculateCartTotals({ items, couponDiscount: discount, deliveryFee });
   return {
-    items: items.map(({ product, variant, quantity, price, mrp, taxRate, sku, unit, image }) => ({ product: product.id, variantId: variant?._id, name: product.name, sku, unit, image, category: product.category, quantity, price, mrp, taxRate })),
+    items: items.map(({ product, variant, quantity, maxOrderableQuantity: safeMaximum, price, mrp, taxRate, sku, unit, image }) => ({
+      product: product.id,
+      variantId: variant?._id,
+      name: product.name,
+      sku,
+      unit,
+      image,
+      category: product.category,
+      quantity,
+      maxOrderableQuantity: safeMaximum,
+      price,
+      mrp,
+      taxRate,
+    })),
     coupon: coupon ? { code: coupon.code, discount } : null,
     totals,
   };
@@ -140,13 +186,12 @@ export async function createOrder(customer, payload) {
   } catch (error) {
     if (error?.code !== 20 && !String(error?.message || '').includes('Transaction numbers are only allowed')) {
       if (payload.paymentMethod === 'razorpay'
-        && ['PRODUCT_NOT_FOUND', 'VARIANT_UNAVAILABLE', 'INSUFFICIENT_STOCK', 'ADDRESS_NOT_FOUND', 'OUT_OF_DELIVERY_RADIUS'].includes(error?.code)) {
-        await refundUnfulfillablePayment(payload.paymentSessionId, customer, error.code, {
-          items: payload.items,
-          couponCode: payload.couponCode,
-          addressId: payload.addressId,
-        });
-        throw new AppError('An item became unavailable after payment. A full refund has been initiated.', 409, 'PAYMENT_REFUND_INITIATED');
+        && ['PRODUCT_NOT_FOUND', 'VARIANT_UNAVAILABLE', 'INVENTORY_RESERVATION_MISMATCH', 'ADDRESS_NOT_FOUND', 'OUT_OF_DELIVERY_RADIUS', 'SLOT_RESERVATION_MISSING'].includes(error?.code)) {
+        const refund = await refundUnfulfillablePayment(payload.paymentSessionId, customer, error.code);
+        if (!refund) {
+          throw new AppError('This payment is already being finalized by another request.', 409, 'PAYMENT_FINALIZATION_IN_PROGRESS');
+        }
+        throw new AppError('The paid order could not be finalized. A full refund has been initiated.', 409, 'PAYMENT_REFUND_INITIATED');
       }
       throw error;
     }
@@ -155,7 +200,7 @@ export async function createOrder(customer, payload) {
     }
     result = await performCreateOrder(customer, payload);
   } finally {
-    session.endSession();
+    await session.endSession();
   }
   for (const change of result.inventoryChanges || []) publishInventoryChange(change);
   publishOrderChange({
@@ -172,111 +217,123 @@ export async function createOrder(customer, payload) {
 }
 
 async function performCreateOrder(customer, payload, session) {
-    const inventoryChanges = [];
-    let items = await hydrateItems(payload.items, session);
-    let coupon;
-    let couponCode = payload.couponCode;
-    let totals;
-    let couponDiscount = 0;
-    let subtotalOnly = 0;
-    if (payload.paymentMethod === 'razorpay') {
-      const preview = await getVerifiedPaymentIntentForOrder(payload.paymentSessionId, customer, session);
-      items = applyCheckoutSnapshot(items, preview.checkoutSnapshot);
-      totals = preview.checkoutSnapshot.totals;
-      couponCode = preview.checkoutSnapshot.couponCode || undefined;
-      if (couponCode) {
-        const couponQuery = Coupon.findOne({ code: couponCode });
-        if (session) couponQuery.session(session);
-        coupon = await couponQuery;
-      }
-    } else {
-      subtotalOnly = calculateCartTotals({ items }).subtotal;
-      const validatedCoupon = await validateCoupon(payload.couponCode, subtotalOnly);
-      coupon = validatedCoupon.coupon;
-      couponDiscount = validatedCoupon.discount;
-    }
-    const address = payload.paymentMethod === 'razorpay'
-      ? customer.addresses.id(payload.addressId)
-      : payload.address || customer.addresses.id(payload.addressId);
-    if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
-    const deliveryAddress = enforceDeliveryRadius(typeof address.toObject === 'function' ? address.toObject() : address);
-    if (payload.paymentMethod === 'cod') {
-      const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(
-        deliveryAddress.distanceFromStoreKm,
-        defaultDeliveryFee(subtotalOnly),
-      );
-      totals = calculateCartTotals({ items, couponDiscount, deliveryFee });
-    }
-    await assertOrderAvailability(customer, payload, deliveryAddress.distanceFromStoreKm, session);
-    if (payload.paymentMethod === 'cod') await validateCodEligibility(customer, payload, totals);
-    const slot = await reserveSlot(payload.slotId, session);
-    let paymentIntent;
-    if (payload.paymentMethod === 'razorpay') {
-      paymentIntent = await consumeRazorpayPaymentIntent({
-        customer,
-        paymentSessionId: payload.paymentSessionId,
-        items: payload.items,
-        couponCode,
-        total: totals.total,
-        addressId: payload.addressId,
-        session,
-      });
-    }
+  let paymentIntent;
+  let items;
+  let coupon;
+  let couponCode = payload.couponCode;
+  let totals;
+  let couponDiscount = 0;
+  let subtotalOnly = 0;
+  let slot;
 
-    for (const item of items) {
-      const variantFilter = item.variant
-        ? { _id: item.product._id, variants: { $elemMatch: { _id: item.variant._id, stock: { $gte: item.quantity }, isActive: true } } }
-        : { _id: item.product._id, stock: { $gte: item.quantity } };
-      const stockUpdate = item.variant
-        ? { $inc: { 'variants.$.stock': -item.quantity, ...(item.variant.isDefault ? { stock: -item.quantity } : {}) } }
-        : { $inc: { stock: -item.quantity } };
-      const updated = await Product.findOneAndUpdate(variantFilter, stockUpdate, { session, new: true });
-      if (!updated) throw new AppError(`${item.name} went out of stock`, 409, 'INSUFFICIENT_STOCK');
-      inventoryChanges.push({
-        action: 'stock.decremented',
-        productId: String(updated._id),
-        stock: updated.stock,
-        quantityChanged: -item.quantity,
-        orderReason: 'order.created',
-      });
+  if (payload.paymentMethod === 'razorpay') {
+    const preview = await getVerifiedPaymentIntentForOrder(payload.paymentSessionId, customer, session);
+    items = applyCheckoutSnapshot(await hydrateItems(payload.items, session, { checkAvailability: false }), preview.checkoutSnapshot);
+    totals = preview.checkoutSnapshot.totals;
+    couponCode = preview.checkoutSnapshot.couponCode || undefined;
+    slot = await getReservedSlotForIntent(preview, session);
+  } else {
+    items = await hydrateItems(payload.items, session);
+    subtotalOnly = calculateCartTotals({ items }).subtotal;
+    const validatedCoupon = await validateCoupon(payload.couponCode, subtotalOnly);
+    coupon = validatedCoupon.coupon;
+    couponDiscount = validatedCoupon.discount;
+  }
+
+  const address = payload.paymentMethod === 'razorpay'
+    ? customer.addresses.id(payload.addressId)
+    : payload.address || customer.addresses.id(payload.addressId);
+  if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
+  const deliveryAddress = enforceDeliveryRadius(typeof address.toObject === 'function' ? address.toObject() : address);
+  if (payload.paymentMethod === 'cod') {
+    const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(
+      deliveryAddress.distanceFromStoreKm,
+      defaultDeliveryFee(subtotalOnly),
+    );
+    totals = calculateCartTotals({ items, couponDiscount, deliveryFee });
+  }
+  await assertOrderAvailability(customer, payload, deliveryAddress.distanceFromStoreKm, session);
+  if (payload.paymentMethod === 'cod') {
+    await validateCodEligibility(customer, payload, totals);
+    slot = await reserveSlot(payload.slotId, session);
+    if (coupon) coupon = await claimCoupon(coupon._id, subtotalOnly, session);
+  } else {
+    paymentIntent = await consumeRazorpayPaymentIntent({
+      customer,
+      paymentSessionId: payload.paymentSessionId,
+      items: payload.items,
+      couponCode,
+      total: totals.total,
+      addressId: payload.addressId,
+      slotId: payload.slotId,
+      session,
+    });
+  }
+
+  const orderObjectId = new mongoose.Types.ObjectId();
+  const [order] = await Order.create([{
+    _id: orderObjectId,
+    orderNumber: `ORD-${orderId()}`,
+    customer: customer._id,
+    customerSnapshot: { name: customer.name, phone: customer.phone, email: customer.email },
+    items: items.map(({ product, variant, quantity, price, mrp, taxRate, name, sku, unit, image }) => ({
+      product: product._id,
+      variantId: variant?._id,
+      quantity,
+      price,
+      mrp,
+      taxRate,
+      name,
+      sku,
+      unit,
+      image,
+      category: product.category,
+    })),
+    address: deliveryAddress,
+    slot: { slotId: slot._id, date: slot.date, startsAt: slot.startsAt, endsAt: slot.endsAt },
+    couponCode: couponCode || coupon?.code,
+    ...totals,
+    paymentMethod: payload.paymentMethod,
+    paymentStatus: 'pending',
+    paymentIntent: paymentIntent?._id,
+    statusTimeline: [{ status: 'placed', note: 'Order placed', actor: customer._id }],
+  }], { session });
+
+  const mutation = payload.paymentMethod === 'razorpay'
+    ? await consumeReservedInventory(paymentIntent.reservation.items, order._id, customer._id, session)
+    : await sellAvailableInventory(items, order._id, customer._id, session);
+  const couponReservationId = payload.paymentMethod === 'razorpay'
+    ? paymentIntent.reservation?.coupon
+    : coupon?._id;
+  if (couponReservationId) {
+    const consumedCoupon = await consumeCouponReservation(couponReservationId, session);
+    if (!consumedCoupon) {
+      throw new AppError('Coupon reservation could not be consumed', 409, 'COUPON_RESERVATION_MISMATCH');
     }
+  }
+  const quantityByProduct = new Map();
+  for (const item of items) {
+    const key = String(item.product._id);
+    quantityByProduct.set(key, (quantityByProduct.get(key) || 0) - item.quantity);
+  }
+  const changes = inventoryChanges(mutation.products, 'stock.decremented', quantityByProduct);
 
-    if (coupon) await Coupon.updateOne({ _id: coupon._id }, { $inc: { usedCount: 1 } }, { session });
-
-    const [order] = await Order.create([{
-      orderNumber: `ORD-${orderId()}`,
-      customer: customer._id,
-      customerSnapshot: { name: customer.name, phone: customer.phone, email: customer.email },
-      items: items.map(({ product, variant, quantity, price, mrp, taxRate, name, sku, unit, image }) => ({ product: product._id, variantId: variant?._id, quantity, price, mrp, taxRate, name, sku, unit, image, category: product.category })),
-      address: deliveryAddress,
-      slot: { slotId: slot._id, date: slot.date, startsAt: slot.startsAt, endsAt: slot.endsAt },
-      couponCode: couponCode || coupon?.code,
-      ...totals,
-      paymentMethod: payload.paymentMethod,
-      paymentStatus: payload.paymentMethod === 'cod' ? 'pending' : 'pending',
-      paymentIntent: paymentIntent?._id,
-      statusTimeline: [{ status: 'placed', note: 'Order placed', actor: customer._id }],
-    }], { session });
-
-    order.invoice = buildInvoice(order);
+  order.invoice = buildInvoice(order);
+  await order.save({ session });
+  if (payload.paymentMethod === 'razorpay') {
+    await createCapturedRazorpayPaymentForOrder(order, paymentIntent, session);
+    order.paymentStatus = 'paid';
     await order.save({ session });
-    if (payload.paymentMethod === 'razorpay') {
-      await createCapturedRazorpayPaymentForOrder(order, paymentIntent, session);
-      order.paymentStatus = 'paid';
-      await order.save({ session });
-      await completeRazorpayPaymentIntent(paymentIntent._id, order._id, session);
-    } else {
-      await createPaymentForOrder(order, session);
-    }
-    return { order, payment: null, inventoryChanges };
+    await completeRazorpayPaymentIntent(paymentIntent._id, order._id, session);
+  } else {
+    await createPaymentForOrder(order, session);
+  }
+  return { order, payment: null, inventoryChanges: changes };
 }
 
 async function assertOrderAvailability(customer, payload, distanceKm, session) {
   const availability = await getStoreAvailability({ distanceKm });
   if (availability.acceptingOrders) return availability;
-
-  // A short grace window prevents a customer who entered Razorpay while open from
-  // being charged and then rejected if a cutoff is crossed during payment.
   if (payload.paymentMethod === 'razorpay' && payload.paymentSessionId) {
     const query = PaymentIntent.findOne({
       _id: payload.paymentSessionId,
@@ -287,18 +344,13 @@ async function assertOrderAvailability(customer, payload, distanceKm, session) {
     const intent = await query;
     if (intent) return { acceptingOrders: true, reasonCode: 'CAPTURED_PAYMENT_GRACE' };
   }
-
   throw new AppError(availability.message, 409, availability.reasonCode, { availability });
 }
 
 async function validateCodEligibility(customer, payload, totals) {
   const settings = await getCodSettings();
-  if (!settings.isEnabled) {
-    throw new AppError('Cash on delivery is currently unavailable. Please choose online payment.', 422, 'COD_DISABLED');
-  }
-  if (!payload.codTermsAccepted) {
-    throw new AppError('Please accept the cash on delivery terms before placing the order.', 422, 'COD_TERMS_REQUIRED');
-  }
+  if (!settings.isEnabled) throw new AppError('Cash on delivery is currently unavailable. Please choose online payment.', 422, 'COD_DISABLED');
+  if (!payload.codTermsAccepted) throw new AppError('Please accept the cash on delivery terms before placing the order.', 422, 'COD_TERMS_REQUIRED');
   if (settings.maxOrderValue > 0 && totals.total > settings.maxOrderValue) {
     throw new AppError(`Cash on delivery is available up to Rs. ${settings.maxOrderValue}. Please choose online payment.`, 422, 'COD_ORDER_VALUE_LIMIT');
   }
@@ -350,16 +402,11 @@ export async function verifyDeliveryOtp(id, otp, actor) {
   if (current.status !== 'out_for_delivery') {
     throw new AppError('Delivery OTP can only be verified for an out-for-delivery order', 409, 'DELIVERY_OTP_NOT_READY');
   }
-  if (!matchesDeliveryOtp(current._id, otp)) {
-    throw new AppError('Invalid delivery OTP', 401, 'DELIVERY_OTP_INVALID');
-  }
+  if (!matchesDeliveryOtp(current._id, otp)) throw new AppError('Invalid delivery OTP', 401, 'DELIVERY_OTP_INVALID');
   const order = await Order.findOneAndUpdate(
     { _id: current._id, status: 'out_for_delivery' },
     {
-      $set: {
-        status: 'delivered',
-        ...(current.paymentMethod === 'cod' ? { paymentStatus: 'paid' } : {}),
-      },
+      $set: { status: 'delivered', ...(current.paymentMethod === 'cod' ? { paymentStatus: 'paid' } : {}) },
       $push: { statusTimeline: { status: 'delivered', note: 'Delivery verified with customer OTP', actor: actor._id, at: new Date() } },
     },
     { new: true, runValidators: true },
@@ -373,28 +420,89 @@ export async function verifyDeliveryOtp(id, otp, actor) {
   return order;
 }
 
+export async function cancelOrder(id, payload, actor) {
+  const session = await mongoose.startSession();
+  let order;
+  let changes = [];
+  let changed = false;
+  let refundQueued = false;
+  try {
+    await session.withTransaction(async () => {
+      const query = Order.findById(id);
+      query.session(session);
+      order = await query;
+      if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+      if (order.status === 'cancelled') return;
+      if (!canTransitionOrderStatus(order.status, 'cancelled')) {
+        throw new AppError(`Invalid order status transition from ${order.status} to cancelled`, 409, 'INVALID_ORDER_TRANSITION');
+      }
+      if (!order.inventoryRestoredAt) {
+        const restored = await restoreOrderInventory(order.items, order._id, actor._id, session);
+        changes = inventoryChanges(restored.products, 'stock.restored');
+        await releaseSlot(order.slot?.slotId, session);
+        if (order.couponCode) {
+          const couponQuery = Coupon.findOne({ code: order.couponCode });
+          couponQuery.session(session);
+          const coupon = await couponQuery;
+          if (coupon) {
+            const restoredCoupon = await restoreConsumedCoupon(coupon._id, session);
+            if (!restoredCoupon) {
+              throw new AppError('Consumed coupon could not be restored', 409, 'COUPON_USAGE_MISMATCH');
+            }
+          }
+        }
+        order.inventoryRestoredAt = new Date();
+      }
+      order.status = 'cancelled';
+      order.statusTimeline.push({ status: 'cancelled', note: payload.note || 'Order cancelled', actor: actor._id });
+      if (order.paymentMethod === 'razorpay' && ['paid', 'partially_refunded'].includes(order.paymentStatus)) {
+        refundQueued = Boolean(await queueOrderRefund(order, 'ORDER_CANCELLED', session));
+      }
+      await order.save({ session });
+      changed = true;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (!changed) return { order, changed: false };
+  for (const change of changes) publishInventoryChange(change);
+  if (refundQueued) {
+    try {
+      await initiateOrderRefund(order, 'ORDER_CANCELLED');
+      order = await Order.findById(order._id);
+    } catch (error) {
+      console.error('Queued order refund provider attempt failed:', error);
+    }
+  }
+  return { order, changed: true };
+}
+
 export async function updateOrderStatus(id, payload, actor) {
+  if (payload.status === 'cancelled') {
+    const { order: cancelled, changed } = await cancelOrder(id, payload, actor);
+    if (!changed) return cancelled;
+    publishOrderChange({
+      action: 'order.status.updated', orderId: String(cancelled._id), orderNumber: cancelled.orderNumber,
+      customerId: String(cancelled.customer), status: cancelled.status, paymentStatus: cancelled.paymentStatus, total: cancelled.total,
+    });
+    await sendOrderStatusNotification(cancelled);
+    return cancelled;
+  }
+
   const order = await Order.findById(id);
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
-  if (payload.status === 'delivered') {
-    throw new AppError('Verify the customer delivery OTP to complete this order', 409, 'DELIVERY_OTP_REQUIRED');
-  }
+  if (payload.status === 'delivered') throw new AppError('Verify the customer delivery OTP to complete this order', 409, 'DELIVERY_OTP_REQUIRED');
   if (!canTransitionOrderStatus(order.status, payload.status)) {
     throw new AppError(`Invalid order status transition from ${order.status} to ${payload.status}`, 409, 'INVALID_ORDER_TRANSITION');
   }
   order.status = payload.status;
   if (payload.deliveryAgent) order.deliveryAgent = payload.deliveryAgent;
   order.statusTimeline.push({ status: payload.status, note: payload.note || `Order marked ${payload.status}`, actor: actor._id });
-  if (payload.status === 'delivered' && order.paymentMethod === 'cod') order.paymentStatus = 'paid';
   await order.save();
   publishOrderChange({
-    action: 'order.status.updated',
-    orderId: String(order._id),
-    orderNumber: order.orderNumber,
-    customerId: String(order.customer),
-    status: order.status,
-    paymentStatus: order.paymentStatus,
-    total: order.total,
+    action: 'order.status.updated', orderId: String(order._id), orderNumber: order.orderNumber,
+    customerId: String(order.customer), status: order.status, paymentStatus: order.paymentStatus, total: order.total,
   });
   await sendOrderStatusNotification(order);
   return order;

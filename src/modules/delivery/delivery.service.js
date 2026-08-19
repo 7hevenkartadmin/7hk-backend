@@ -98,3 +98,12 @@ export async function reserveSlot(slotId, session) {
   if (!slot) throw new AppError('Delivery slot unavailable', 409, 'SLOT_UNAVAILABLE');
   return slot;
 }
+
+export async function releaseSlot(slotId, session) {
+  if (!slotId) return null;
+  return DeliverySlot.findOneAndUpdate(
+    { _id: slotId, booked: { $gt: 0 } },
+    { $inc: { booked: -1 } },
+    { new: true, session },
+  );
+}

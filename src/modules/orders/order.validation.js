@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { MAX_ITEM_QUANTITY } from '../../shared/utils/inventory.js';
 
 const itemSchema = z.object({
   productId: z.string().regex(/^[0-9a-fA-F]{24}$/),
   variantId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
-  quantity: z.number().int().positive().max(99),
+  quantity: z.number().int().positive().max(MAX_ITEM_QUANTITY),
 });
 const itemsSchema = z.array(itemSchema).min(1).refine(
   (items) => new Set(items.map((item) => item.productId + ':' + (item.variantId || ''))).size === items.length,
