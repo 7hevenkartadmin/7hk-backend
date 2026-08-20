@@ -5,6 +5,15 @@ This flow is shared by the storefront and Android app. Login OTPs use the
 future flow: they use the `DELIVERY` purpose and the `IN_APP` channel and must
 not reuse these routes or Meta messages.
 
+## Local development
+
+Set `NODE_ENV=development`, `WHATSAPP_PROVIDER=console`, and
+`OTP_WORKER_ENABLED=true`. Request an OTP normally, then read the generated
+code from the backend terminal. The console provider masks the phone number and
+uses the same Redis challenge, expiry, resend cooldown, attempt limit, and
+verification routes as Meta delivery. It is rejected by production environment
+validation, where `WHATSAPP_PROVIDER=meta` remains mandatory.
+
 ## Meta setup
 
 1. Create and approve the authentication template described in
@@ -84,8 +93,10 @@ logs or general preferences.
 - Status processing is monotonic, so late or out-of-order callbacks cannot move
   a challenge backwards.
 - Verification is atomic and can proceed as soon as the customer has the OTP.
-- Provider and webhook logs must use request IDs and sanitized error codes, not
-  OTPs, phone numbers, access tokens, message bodies, or webhook payloads.
+- Production provider and webhook logs must use request IDs and sanitized error
+  codes, not OTPs, phone numbers, access tokens, message bodies, or webhook
+  payloads. The development-only console provider intentionally prints the OTP
+  with only the final four phone digits and must never be selected in production.
 - For the expected load (at most about 10,000 users per month), one Redis-backed
   queue worker on the single application server is sufficient. Redis remains
   required for atomic verification, rate limits, queue durability, and delivery

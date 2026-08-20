@@ -64,6 +64,6 @@ realtimeRoutes.get('/inventory', requireAuth, authorize('admin', 'manager'), (re
   streamAdminEvents(req, res, 'inventory');
 });
 
-realtimeRoutes.get('/orders', requireAuth, (req, res) => {
+realtimeRoutes.get('/orders', requireAuth, authorize('customer'), (req, res) => {
   streamCustomerOrderEvents(req, res);
 });

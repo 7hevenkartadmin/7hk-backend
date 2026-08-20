@@ -87,6 +87,8 @@ test('shared session cookie attachment serializes remaining validity and securit
 
   assert.equal(response.values.length, 2);
   const [accessCookie, refreshCookie] = response.values;
+  assert.match(accessCookie, /^accessToken=/);
+  assert.match(refreshCookie, /^customerRefreshToken=/);
   assert.equal(Number(attribute(accessCookie, 'Max-Age')), accessSeconds - 120);
   assert.equal(Number(attribute(refreshCookie, 'Max-Age')), refreshSeconds - 120);
   assert.match(accessCookie, /; Path=\//);
@@ -96,6 +98,23 @@ test('shared session cookie attachment serializes remaining validity and securit
     assert.match(cookie, /; SameSite=Lax/);
     assert.doesNotMatch(cookie, /; Secure/);
   }
+});
+
+test('admin and customer sessions use separate refresh cookies', () => {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const currentTimeMs = issuedAt * 1000;
+  const tokens = {
+    accessToken: signedToken(issuedAt, 60),
+    refreshToken: signedToken(issuedAt, 120),
+  };
+  const customerResponse = cookieResponse();
+  const adminResponse = cookieResponse();
+
+  attachCookies(customerResponse, tokens, currentTimeMs, 'customer');
+  attachCookies(adminResponse, tokens, currentTimeMs, 'admin');
+
+  assert.match(customerResponse.values[1], /^customerRefreshToken=/);
+  assert.match(adminResponse.values[1], /^adminRefreshToken=/);
 });
 
 test('delayed deterministic replay keeps cookie expiry aligned to JWT exp under a controlled clock', () => {

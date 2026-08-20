@@ -6,6 +6,7 @@ import { Coupon } from "../src/modules/coupons/coupon.model.js";
 import { Order } from "../src/modules/orders/order.model.js";
 import { Payment } from "../src/modules/payments/payment.model.js";
 import { User } from "../src/modules/users/user.model.js";
+import { Address } from "../src/modules/addresses/address.model.js";
 
 const objectId = () => new mongoose.Types.ObjectId();
 
@@ -113,25 +114,14 @@ test("product model keeps search and operational indexes declared", () => {
   assert.ok(indexes.some((fields) => fields.isActive === 1));
 });
 
-test("user model normalizes email and enforces address delivery coordinates", () => {
+test("user model normalizes email and stores only address references", () => {
+  const addressId = objectId();
   const user = new User({
     name: "Customer",
     email: "  CUSTOMER@EXAMPLE.COM ",
     phone: "9999999999",
     passwordHash: "hashed-password",
-    addresses: [
-      {
-        recipientName: "Customer",
-        phone: "9999999999",
-        line1: "Main Road",
-        city: "Patna",
-        pincode: "800001",
-        latitude: 25.6,
-        longitude: 85.1,
-        distanceFromStoreKm: 2.4,
-        isDefault: true,
-      },
-    ],
+    addresses: [addressId],
   });
 
   const error = user.validateSync();
@@ -140,10 +130,55 @@ test("user model normalizes email and enforces address delivery coordinates", ()
   assert.equal(user.email, "customer@example.com");
   assert.equal(user.role, "customer");
   assert.equal(user.status, "active");
-  assert.equal(user.addresses[0].state, "Bihar");
+  assert.equal(String(user.addresses[0]), String(addressId));
 });
 
-test("user model rejects unsupported roles, statuses, and incomplete addresses", () => {
+test("address model owns delivery details and validates coordinates", () => {
+  const address = new Address({
+    userId: objectId(), recipientName: "Customer", phone: "9999999999",
+    line1: "Main Road", city: "Patna", pincode: "800001",
+    latitude: 25.6, longitude: 85.1,
+    location: { type: "Point", coordinates: [85.1, 25.6] },
+    distanceFromStoreKm: 2.4, deliveryZone: "A", deliveryCharge: 20,
+  });
+  assert.equal(address.validateSync(), undefined);
+  address.latitude = undefined;
+  assert.ok(address.validateSync()?.errors.latitude);
+});
+
+test("user phone validation is required for customers but does not block staff email login records", () => {
+  const invalidCustomer = new User({
+    name: "Customer",
+    phone: "not-a-phone",
+    passwordHash: "hashed-password",
+    role: "customer",
+  });
+  const missingCustomerPhone = new User({
+    name: "Customer",
+    passwordHash: "hashed-password",
+    role: "customer",
+  });
+  const legacyAdmin = new User({
+    name: "Administrator",
+    email: "admin@example.com",
+    phone: "legacy-admin-value",
+    passwordHash: "hashed-password",
+    role: "admin",
+  });
+  const adminWithoutPhone = new User({
+    name: "Administrator",
+    email: "admin-without-phone@example.com",
+    passwordHash: "hashed-password",
+    role: "admin",
+  });
+
+  assert.ok(invalidCustomer.validateSync()?.errors.phone);
+  assert.ok(missingCustomerPhone.validateSync()?.errors.phone);
+  assert.equal(legacyAdmin.validateSync(), undefined);
+  assert.equal(adminWithoutPhone.validateSync(), undefined);
+});
+
+test("user model rejects unsupported roles, statuses, and embedded address objects", () => {
   const user = new User({
     name: "Customer",
     phone: "9999999999",
@@ -166,9 +201,7 @@ test("user model rejects unsupported roles, statuses, and incomplete addresses",
   assert.ok(error);
   assert.ok(error.errors.role);
   assert.ok(error.errors.status);
-  assert.ok(error.errors["addresses.0.latitude"]);
-  assert.ok(error.errors["addresses.0.longitude"]);
-  assert.ok(error.errors["addresses.0.distanceFromStoreKm"]);
+  assert.ok(error.errors["addresses.0"]);
 });
 
 test("order model accepts a complete grocery order and applies operational defaults", () => {

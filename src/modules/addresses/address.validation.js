@@ -1,24 +1,20 @@
 import { z } from 'zod';
 
-export const createAddressSchema = z.object({
-  label: z.enum(['Home', 'Work', 'Hotel', 'Other']).default('Home'),
-  flatNumber: z.string().trim().min(1).max(100),
+export const addressSchema = z.object({
+  flatNumber: z.string().trim().max(100).optional().default(''),
   landmark: z.string().trim().max(120).optional().default(''),
-  formattedAddress: z.string().trim().min(4).max(240),
-  lat: z.number().min(-90).max(90).optional(),
-  lng: z.number().min(-180).max(180).optional(),
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional(),
+  formattedAddress: z.string().trim().max(240).optional().default(''),
   recipientName: z.string().trim().min(2).max(80).optional(),
-  phone: z.preprocess((value) => (value === '' ? undefined : value), z.string().trim().min(10).max(20).optional()),
+  phone: z.preprocess((value) => (value === '' ? undefined : value), z.string().trim().regex(/^(?:\+91)?[6-9][0-9]{9}$/, 'Enter a valid Indian phone number').optional()),
+  line1: z.string().trim().min(4).max(160),
+  line2: z.string().trim().max(160).optional().default(''),
   city: z.string().trim().min(2).max(80).optional().default('Parihar'),
   state: z.string().trim().min(2).max(80).optional().default('Bihar'),
   pincode: z.string().trim().min(5).max(10).optional().default('843324'),
-  isDefault: z.boolean().optional().default(true),
-}).refine((value) => Number.isFinite(value.lat ?? value.latitude), {
-  message: 'Latitude is required',
-  path: ['lat'],
-}).refine((value) => Number.isFinite(value.lng ?? value.longitude), {
-  message: 'Longitude is required',
-  path: ['lng'],
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  isDefault: z.boolean().optional().default(false),
 });
+
+export const createAddressSchema = addressSchema;
+export const validateAddressLocationSchema = addressSchema.pick({ latitude: true, longitude: true });

@@ -21,14 +21,13 @@ const orderSchema = new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   customerSnapshot: {
     name: String,
-    phone: String,
+    phone: { type: String, match: [/^(?:\+91)?[6-9][0-9]{9}$/, 'Enter a valid Indian phone number'] },
     email: String,
   },
   items: [orderItemSchema],
   address: {
-    label: String,
     recipientName: String,
-    phone: String,
+    phone: { type: String, match: [/^(?:\+91)?[6-9][0-9]{9}$/, 'Enter a valid Indian phone number'] },
     line1: String,
     line2: String,
     landmark: String,
@@ -68,7 +67,7 @@ const orderSchema = new mongoose.Schema({
   },
   deliveryAgent: {
     name: String,
-    phone: String,
+    phone: { type: String, match: [/^(?:\+91)?[6-9][0-9]{9}$/, 'Enter a valid Indian phone number'] },
   },
   inventoryRestoredAt: Date,
 }, { timestamps: true });

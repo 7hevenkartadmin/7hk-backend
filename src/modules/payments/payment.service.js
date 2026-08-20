@@ -13,6 +13,7 @@ import { calculateCartTotals, defaultDeliveryFee } from '../orders/pricing.servi
 import { deliveryFeeForDistance } from '../settings/settings.service.js';
 import { assertStoreAcceptingOrders } from '../settings/storeAvailability.service.js';
 import { PaymentIntent } from './paymentIntent.model.js';
+import { findOwnedAddress } from '../addresses/address.service.js';
 import { Payment } from './payment.model.js';
 
 export const CHECKOUT_TTL_MS = 15 * 60 * 1000;
@@ -295,7 +296,7 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
   const items = await hydrateCheckoutItems(payload.items);
   const subtotalOnly = calculateCartTotals({ items }).subtotal;
   const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly);
-  const address = customer.addresses.id(payload.addressId);
+  const address = await findOwnedAddress(customer._id, payload.addressId);
   if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   await assertStoreAcceptingOrders({ distanceKm: address.distanceFromStoreKm });
   const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(address.distanceFromStoreKm, defaultDeliveryFee(subtotalOnly));

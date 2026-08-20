@@ -18,6 +18,7 @@ export function applySecurity(app) {
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
+    exposedHeaders: ['Content-Disposition'],
   }));
   app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 100000, standardHeaders: true, legacyHeaders: false }));
   app.use(express.json({

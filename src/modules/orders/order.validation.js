@@ -24,29 +24,13 @@ const razorpayPaymentSchema = z.object({
 });
 
 export const createOrderSchema = quoteOrderSchema.extend({
-  addressId: z.string().optional(),
-  address: z.object({
-    label: z.string().optional(),
-    recipientName: z.string().min(2),
-    phone: z.string().min(10),
-    line1: z.string().min(4),
-    line2: z.string().optional().default(''),
-    landmark: z.string().optional().default(''),
-    city: z.string().min(2),
-    state: z.string().default('Bihar'),
-    pincode: z.string().min(5),
-    latitude: z.number().min(-90).max(90),
-    longitude: z.number().min(-180).max(180),
-    distanceFromStoreKm: z.number().min(0).optional(),
-  }).optional(),
+  addressId: z.string().regex(/^[0-9a-fA-F]{24}$/),
   slotId: z.string().min(12),
   paymentMethod: z.enum(['razorpay', 'cod']),
   paymentSessionId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
   razorpayPayment: razorpayPaymentSchema.optional(),
   codTermsAccepted: z.boolean().optional().default(false),
 })
-  .refine((data) => data.addressId || data.address, { message: 'addressId or address is required' })
-  .refine((data) => data.paymentMethod !== 'razorpay' || data.addressId, { message: 'A saved addressId is required for online payment' })
   .refine((data) => data.paymentMethod !== 'razorpay' || data.paymentSessionId, { message: 'paymentSessionId is required for online payment' });
 
 export const updateStatusSchema = z.object({
@@ -54,7 +38,7 @@ export const updateStatusSchema = z.object({
   note: z.string().max(240).optional(),
   deliveryAgent: z.object({
     name: z.string().min(2),
-    phone: z.string().min(10),
+    phone: z.string().regex(/^(?:\+91)?[6-9][0-9]{9}$/, 'Enter a valid Indian phone number'),
   }).optional(),
 });
 

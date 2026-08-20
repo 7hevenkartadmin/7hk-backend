@@ -14,11 +14,11 @@ export const orderRoutes = Router();
 
 orderRoutes.use(requireAuth);
 
-orderRoutes.post('/quote', validate(quoteOrderSchema), asyncHandler(async (req, res) => {
+orderRoutes.post('/quote', authorize('customer'), validate(quoteOrderSchema), asyncHandler(async (req, res) => {
   ok(res, await quoteOrder(req.user, req.body), 'Order quote calculated');
 }));
 
-orderRoutes.post('/', validate(createOrderSchema), asyncHandler(async (req, res) => {
+orderRoutes.post('/', authorize('customer'), validate(createOrderSchema), asyncHandler(async (req, res) => {
   created(res, await createOrder(req.user, req.body), 'Order placed');
 }));
 
@@ -29,11 +29,11 @@ orderRoutes.post('/admin/:id/verify-delivery-otp', authorize('admin', 'manager',
   ok(res, { order }, 'Delivery verified');
 }));
 
-orderRoutes.get('/me', asyncHandler(async (req, res) => {
+orderRoutes.get('/me', authorize('customer'), asyncHandler(async (req, res) => {
   ok(res, { orders: await listCustomerOrders(req.user._id) }, 'Orders loaded');
 }));
 
-orderRoutes.get('/:idOrNumber', asyncHandler(async (req, res) => {
+orderRoutes.get('/:idOrNumber', authorize('customer'), asyncHandler(async (req, res) => {
   ok(res, { order: await getOrderForCustomer(req.params.idOrNumber, req.user) }, 'Order loaded');
 }));
 
@@ -44,7 +44,7 @@ orderRoutes.patch('/:id/status', authorize('admin', 'manager', 'support'), valid
   ok(res, { order }, 'Order status updated');
 }));
 
-orderRoutes.get('/:id/invoice', asyncHandler(async (req, res) => {
+orderRoutes.get('/:id/invoice', authorize('customer'), asyncHandler(async (req, res) => {
   const order = await getOrderForCustomer(req.params.id, req.user);
   streamInvoicePdf(order, res);
 }));

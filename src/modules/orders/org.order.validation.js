@@ -21,7 +21,6 @@ export const createOrderSchema = quoteOrderSchema
     addressId: z.string().optional(),
     address: z
       .object({
-        label: z.string().optional(),
         recipientName: z.string().min(2),
         phone: z.string().min(10),
         line1: z.string().min(4),

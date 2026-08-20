@@ -34,6 +34,7 @@ import { deliveryFeeForDistance, getCodSettings } from '../settings/settings.ser
 import { assertStoreAcceptingOrders, getStoreAvailability } from '../settings/storeAvailability.service.js';
 import { PaymentIntent } from '../payments/paymentIntent.model.js';
 import { deliveryOtpForOrder, matchesDeliveryOtp } from './delivery-otp.service.js';
+import { findOwnedAddress } from '../addresses/address.service.js';
 import {
   consumeReservedInventory,
   inventoryChanges,
@@ -145,7 +146,7 @@ export async function quoteOrder(customer, payload) {
   const items = await hydrateItems(payload.items);
   const subtotalOnly = calculateCartTotals({ items }).subtotal;
   const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly);
-  const selectedAddress = payload.addressId ? customer.addresses.id(payload.addressId) : null;
+  const selectedAddress = payload.addressId ? await findOwnedAddress(customer._id, payload.addressId) : null;
   if (payload.addressId && !selectedAddress) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   await assertStoreAcceptingOrders({ distanceKm: selectedAddress?.distanceFromStoreKm });
   const deliveryFee = selectedAddress
@@ -240,9 +241,7 @@ async function performCreateOrder(customer, payload, session) {
     couponDiscount = validatedCoupon.discount;
   }
 
-  const address = payload.paymentMethod === 'razorpay'
-    ? customer.addresses.id(payload.addressId)
-    : payload.address || customer.addresses.id(payload.addressId);
+  const address = await findOwnedAddress(customer._id, payload.addressId, session);
   if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   const deliveryAddress = enforceDeliveryRadius(typeof address.toObject === 'function' ? address.toObject() : address);
   if (payload.paymentMethod === 'cod') {

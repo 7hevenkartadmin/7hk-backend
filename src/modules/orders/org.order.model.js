@@ -44,7 +44,6 @@ const orderSchema = new mongoose.Schema(
     },
     items: [orderItemSchema],
     address: {
-      label: String,
       recipientName: String,
       phone: String,
       line1: String,

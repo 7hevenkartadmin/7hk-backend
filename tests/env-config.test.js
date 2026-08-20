@@ -64,8 +64,9 @@ test('environment booleans default only when absent and preserve exact true and 
   }
 });
 
-test('only implemented WhatsApp providers are accepted', () => {
+test('only implemented OTP delivery providers are accepted', () => {
   assert.equal(parseEnvironment({ ...base, WHATSAPP_PROVIDER: 'disabled' }).WHATSAPP_PROVIDER, 'disabled');
+  assert.equal(parseEnvironment({ ...base, WHATSAPP_PROVIDER: 'console' }).WHATSAPP_PROVIDER, 'console');
   for (const unsupported of ['mock', 'twilio', 'META', '']) {
     assertIssueFields({ ...base, WHATSAPP_PROVIDER: unsupported }, ['WHATSAPP_PROVIDER']);
   }
@@ -162,6 +163,10 @@ test('production preserves secure-cookie, Meta-provider, and enabled-worker safe
   );
   assertIssueFields(
     environmentFor('production', { WHATSAPP_PROVIDER: 'disabled' }),
+    ['WHATSAPP_PROVIDER'],
+  );
+  assertIssueFields(
+    environmentFor('production', { WHATSAPP_PROVIDER: 'console' }),
     ['WHATSAPP_PROVIDER'],
   );
   assertIssueFields(

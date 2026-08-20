@@ -8,6 +8,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "migrate:inventory": "node src/scripts/migrate-inventory.js",
+    "migrate:addresses": "node src/scripts/migrate-addresses.js",
     "migrate:products": "node src/scripts/normalize-products.js",
     "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",
     "test:backend": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",

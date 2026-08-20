@@ -140,11 +140,11 @@ test('store settings validation accepts COD fraud controls and rejects unsafe va
 
 test('saved address validation requires map coordinates and backend-compatible details', () => {
   const address = {
-    label: 'Home', recipientName: 'Customer', phone: '9876543210', flatNumber: '3A',
+    recipientName: 'Customer', phone: '9876543210', flatNumber: '3A',
     formattedAddress: 'Main Road', line1: '3A, Main Road', line2: 'Main Road', landmark: '',
     city: 'Parihar', state: 'Bihar', pincode: '843324', latitude: 26.713, longitude: 85.686, isDefault: true,
   };
   assert.equal(addressSchema.safeParse(address).success, true);
   assert.equal(addressSchema.safeParse({ ...address, latitude: undefined }).success, false);
-  assert.equal(addressSchema.safeParse({ ...address, label: 'Friend' }).success, false);
+  assert.equal(Object.hasOwn(addressSchema.parse({ ...address, label: 'Friend' }), 'label'), false);
 });

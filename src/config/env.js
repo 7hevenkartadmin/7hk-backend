@@ -11,7 +11,7 @@ const strictEnvironmentBoolean = (defaultValue) => z.string()
   .transform((value) => value === 'true');
 
 const whatsappProviderSchema = z.string()
-  .refine((value) => value === 'disabled' || value === 'meta', {
+  .refine((value) => ['disabled', 'console', 'meta'].includes(value), {
     message: 'must select an implemented provider',
   })
   .default('disabled');
@@ -23,8 +23,8 @@ const envSchema = z.object({
   MONGODB_URI: z.string().min(1),
   JWT_ACCESS_SECRET: z.string().min(24),
   JWT_REFRESH_SECRET: z.string().min(24),
-  ACCESS_TOKEN_TTL: z.string().default('15m'),
-  REFRESH_TOKEN_TTL: z.string().default('7d'),
+  ACCESS_TOKEN_TTL: z.string().default('30m'),
+  REFRESH_TOKEN_TTL: z.string().default('30d'),
   CORS_ORIGINS: z.string().default('http://localhost:5173,http://admin.localhost:5173'),
   COOKIE_SECURE: strictEnvironmentBoolean(false),
   RAZORPAY_KEY_ID: z.string().optional().default(''),

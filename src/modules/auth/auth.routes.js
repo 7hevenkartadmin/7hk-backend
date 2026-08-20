@@ -9,6 +9,7 @@ import { loginSchema, refreshSchema, registerSchema, requestOtpSchema, verifyOtp
 import { login, logout, refreshSession, registerCustomer, requestOtp, resendOtp, verifyOtp } from './auth.service.js';
 import { requireAuth } from './auth.middleware.js';
 import { tokenLifetimeMs } from './token.service.js';
+import { AppError } from '../../shared/utils/AppError.js';
 
 export const authRoutes = Router();
 
@@ -19,8 +20,9 @@ const cookieOptions = {
 };
 
 const refreshCookiePath = `/api/${env.API_VERSION}/auth`;
+const refreshCookieName = (role = 'customer') => role === 'customer' ? 'customerRefreshToken' : 'adminRefreshToken';
 
-export function attachCookies(res, tokens, currentTimeMs = Date.now()) {
+export function attachCookies(res, tokens, currentTimeMs = Date.now(), role = 'customer') {
   const accessMaxAge = tokenLifetimeMs(tokens.accessToken, currentTimeMs);
   const refreshMaxAge = tokenLifetimeMs(tokens.refreshToken, currentTimeMs);
 
@@ -29,7 +31,7 @@ export function attachCookies(res, tokens, currentTimeMs = Date.now()) {
     path: '/',
     maxAge: accessMaxAge,
   });
-  res.cookie('refreshToken', tokens.refreshToken, {
+  res.cookie(refreshCookieName(role), tokens.refreshToken, {
     ...cookieOptions,
     path: refreshCookiePath,
     maxAge: refreshMaxAge,
@@ -37,7 +39,7 @@ export function attachCookies(res, tokens, currentTimeMs = Date.now()) {
 }
 
 function sendSession(res, result, message, statusCode = 200) {
-  attachCookies(res, result.tokens);
+  attachCookies(res, result.tokens, Date.now(), result.user.role);
   return ok(res, { user: result.user }, message, statusCode);
 }
 
@@ -59,10 +61,17 @@ authRoutes.post('/login', authRateLimiter, validate(loginSchema), asyncHandler(a
   sendSession(res, result, 'Logged in');
 }));
 
-authRoutes.post('/refresh', authRateLimiter, validate(refreshSchema), asyncHandler(async (req, res) => {
-  const result = await refreshSession(req.cookies?.refreshToken);
+async function refreshForRole(req, res, expectedRole) {
+  const result = await refreshSession(req.cookies?.[refreshCookieName(expectedRole)]);
+  const validRole = expectedRole === 'customer'
+    ? result.user.role === 'customer'
+    : ['admin', 'manager', 'support'].includes(result.user.role);
+  if (!validRole) throw new AppError('Refresh token role does not match this application', 403, 'FORBIDDEN');
   sendSession(res, result, 'Session refreshed');
-}));
+}
+
+authRoutes.post('/refresh/customer', authRateLimiter, validate(refreshSchema), asyncHandler((req, res) => refreshForRole(req, res, 'customer')));
+authRoutes.post('/refresh/admin', authRateLimiter, validate(refreshSchema), asyncHandler((req, res) => refreshForRole(req, res, 'admin')));
 
 authRoutes.post('/otp/request', otpRateLimiter, validate(requestOtpSchema), asyncHandler(async (req, res) => {
   ok(
@@ -80,6 +89,6 @@ authRoutes.post('/otp/verify', authRateLimiter, validate(verifyOtpSchema), async
 authRoutes.post('/logout', requireAuth, asyncHandler(async (req, res) => {
   await logout(req.user.id);
   res.clearCookie('accessToken', { ...cookieOptions, path: '/' });
-  res.clearCookie('refreshToken', { ...cookieOptions, path: refreshCookiePath });
+  res.clearCookie(refreshCookieName(req.user.role), { ...cookieOptions, path: refreshCookiePath });
   ok(res, null, 'Logged out');
 }));
