@@ -101,8 +101,10 @@ async function writeMovements(items, orderId, type, quantitySign, actorId, reaso
     quantityDelta: quantitySign * item.quantity,
     actor: actorId,
     reason,
+  
   }));
-  return InventoryMovement.create(rows, { session });
+  console.log(rows);
+  return InventoryMovement.insertMany(rows, { session });
 }
 
 export async function consumeReservedInventory(items, orderId, actorId, session) {
