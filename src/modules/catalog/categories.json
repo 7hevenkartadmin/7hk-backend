@@ -622,5 +622,34 @@
         "sortOrder": 6
       }
     ]
+  },
+  {
+    "name": "Paan Corner",
+    "slug": "paan-corner",
+    "description": "Age-restricted tobacco products and smoking accessories. Sale only to adults in accordance with applicable law.",
+    "icon": "ShoppingBasket",
+    "image": "https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=2700/layout-engine/2022-05/Group-33704.jpg",
+    "isActive": true,
+    "sortOrder": 11,
+    "subcategories": [
+      {
+        "name": "Cigarettes",
+        "slug": "cigarettes",
+        "description": "Age-restricted cigarette packs. Smoking is injurious to health.",
+        "icon": "ShoppingBasket",
+        "image": "https://www.bbassets.com/media/uploads/p/xl/40319511_7-marlboro-filter-black.jpg",
+        "isActive": true,
+        "sortOrder": 1
+      },
+      {
+        "name": "Rolling Papers & Smoking Accessories",
+        "slug": "rolling-papers-smoking-accessories",
+        "description": "Age-restricted rolling papers, filter tips and related smoking accessories.",
+        "icon": "ShoppingBasket",
+        "image": "https://slimjim.in/cdn/shop/products/gogo-go-skins-unbleached-king-size-papers-paraphernalia-captain-gogo-498315_535x.jpg?v=1633531586",
+        "isActive": true,
+        "sortOrder": 2
+      }
+    ]
   }
 ]

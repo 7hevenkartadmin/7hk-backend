@@ -175,6 +175,13 @@ test('production preserves secure-cookie, Meta-provider, and enabled-worker safe
   );
 });
 
+test('production rejects Razorpay test-mode keys', () => {
+  assertIssueFields(
+    environmentFor('production', { ...validMeta, RAZORPAY_KEY_ID: 'rzp_test_synthetic' }),
+    ['RAZORPAY_KEY_ID'],
+  );
+});
+
 test('startup exits before serving and prints only sanitized field reasons', async () => {
   const { spawnSync } = await import('node:child_process');
   const envModule = new URL('../src/config/env.js', import.meta.url).href;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { registerSchema } from '../src/modules/auth/auth.validation.js';
 import { productSchema } from '../src/modules/catalog/catalog.validation.js';
 import { createOrderSchema } from '../src/modules/orders/order.validation.js';
-import { createRazorpayOrderSchema } from '../src/modules/payments/payment.validation.js';
+import { createRazorpayOrderSchema, verifyPaymentSchema } from '../src/modules/payments/payment.validation.js';
 
 test('register schema enforces strong enough customer password', () => {
   const weak = registerSchema.safeParse({ name: 'Aman', phone: '9876543210', password: '123' });
@@ -51,4 +51,16 @@ test('Razorpay order creation requires a saved address and rejects client-suppli
   assert.equal(createRazorpayOrderSchema.safeParse({ ...base, addressId: '507f1f77bcf86cd799439012' }).success, true);
   assert.equal(createRazorpayOrderSchema.safeParse({ ...base, addressId: '507f1f77bcf86cd799439012', distanceFromStoreKm: 0 }).success, false);
   assert.equal(createRazorpayOrderSchema.safeParse({ items: base.items, addressId: '507f1f77bcf86cd799439012' }).success, false);
+});
+
+test('Razorpay verification requires the internal session and all provider proof fields', () => {
+  const proof = {
+    paymentSessionId: '507f1f77bcf86cd799439011',
+    razorpay_order_id: 'order_abc123',
+    razorpay_payment_id: 'pay_abc123',
+    razorpay_signature: 'a'.repeat(64),
+  };
+  assert.equal(verifyPaymentSchema.safeParse(proof).success, true);
+  assert.equal(verifyPaymentSchema.safeParse({ ...proof, paymentSessionId: undefined }).success, false);
+  assert.equal(verifyPaymentSchema.safeParse({ ...proof, razorpay_signature: 'tampered' }).success, false);
 });

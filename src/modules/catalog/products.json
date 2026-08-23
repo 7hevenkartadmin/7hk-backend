@@ -7029,5 +7029,677 @@
     "isActive": true,
     "rating": 0,
     "ratingCount": 0
+  },
+  {
+    "name": "Marlboro Filter Black Cigarettes",
+    "slug": "marlboro-filter-black-cigarettes-12",
+    "description": "Marlboro Filter Black pack containing 12 filter cigarettes. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Marlboro",
+    "image": "https://www.bbassets.com/media/uploads/p/xl/40319511_7-marlboro-filter-black.jpg",
+    "gallery": [
+      "https://www.bbassets.com/media/uploads/p/xl/40319511_7-marlboro-filter-black.jpg"
+    ],
+    "mrp": 270,
+    "price": 250,
+    "discount": 7,
+    "unit": "12 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-MARLBORO-BLACK-12",
+    "variants": [
+      {
+        "title": "Pack of 12",
+        "unit": "12 cigarettes",
+        "sku": "PAAN-MARLBORO-BLACK-12",
+        "mrp": 270,
+        "price": 250,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://www.bbassets.com/media/uploads/p/xl/40319511_7-marlboro-filter-black.jpg"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 12 cigarettes",
+      "Manufacturer: Godfrey Phillips India Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["marlboro", "filter black", "cigarettes", "paan corner", "12 pack"],
+    "manufacturer": "Godfrey Phillips India Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Captain Gogo One Rolling Papers with Tips",
+    "slug": "captain-gogo-one-rolling-papers-with-tips-54-10",
+    "description": "Captain Gogo One smoking-paper pack supplied as 54 papers with 10 filter tips. For sale only to adults; keep away from children.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "rolling-papers-smoking-accessories",
+    "brand": "Captain Gogo",
+    "image": "https://slimjim.in/cdn/shop/products/gogo-go-skins-unbleached-king-size-papers-paraphernalia-captain-gogo-498315_535x.jpg?v=1633531586",
+    "gallery": [
+      "https://slimjim.in/cdn/shop/products/gogo-go-skins-unbleached-king-size-papers-paraphernalia-captain-gogo-498315_535x.jpg?v=1633531586"
+    ],
+    "mrp": 640,
+    "price": 100,
+    "discount": 84,
+    "unit": "54 papers + 10 tips",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-GOGO-ONE-54-10",
+    "variants": [
+      {
+        "title": "54 papers + 10 tips",
+        "unit": "54 papers + 10 tips",
+        "sku": "PAAN-GOGO-ONE-54-10",
+        "mrp": 640,
+        "price": 100,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://slimjim.in/cdn/shop/products/gogo-go-skins-unbleached-king-size-papers-paraphernalia-captain-gogo-498315_535x.jpg?v=1633531586"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 54 papers + 10 tips",
+      "Manufacturer: Moondust Paper Pvt. Ltd.",
+      "Smoking accessory",
+      "Adults only (18+)"
+    ],
+    "tags": ["captain gogo", "rolling papers", "filter tips", "smoking accessories", "paan corner"],
+    "manufacturer": "Moondust Paper Pvt. Ltd.",
+    "countryOfOrigin": "India",
+    "shelfLife": "Not applicable",
+    "storageInstructions": "Store in a cool, dry place away from direct sunlight, moisture and ignition sources. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Marlboro Advance Compact Cigarettes",
+    "slug": "marlboro-advance-compact-cigarettes-10",
+    "description": "Marlboro Advance Compact pack containing 10 filter cigarettes. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Marlboro",
+    "image": "https://www.bbassets.com/media/uploads/p/xl/40319509_7-marlboro-advance-compact.jpg",
+    "gallery": [
+      "https://www.bbassets.com/media/uploads/p/xl/40319509_7-marlboro-advance-compact.jpg"
+    ],
+    "mrp": 115,
+    "price": 93,
+    "discount": 19,
+    "unit": "10 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-MARLBORO-ADV-COMPACT-10",
+    "variants": [
+      {
+        "title": "Pack of 10",
+        "unit": "10 cigarettes",
+        "sku": "PAAN-MARLBORO-ADV-COMPACT-10",
+        "mrp": 115,
+        "price": 93,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://www.bbassets.com/media/uploads/p/xl/40319509_7-marlboro-advance-compact.jpg"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 10 cigarettes",
+      "Manufacturer: Godfrey Phillips India Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["marlboro", "advance compact", "cigarettes", "paan corner", "10 pack"],
+    "manufacturer": "Godfrey Phillips India Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Total Cigarettes",
+    "slug": "vst-total-cigarettes-10",
+    "description": "Total pack containing 10 filter cigarettes from VST Industries. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Total",
+    "image": "https://tpackss.globaltobaccocontrol.org/sites/default/files/styles/500x500/public/pack_images/IND_DEL_H2_04_007_0_0_2_3.JPG?itok=WL4dVojE",
+    "gallery": [
+      "https://tpackss.globaltobaccocontrol.org/sites/default/files/styles/500x500/public/pack_images/IND_DEL_H2_04_007_0_0_2_3.JPG?itok=WL4dVojE"
+    ],
+    "mrp": 95,
+    "price": 85,
+    "discount": 11,
+    "unit": "10 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-VST-TOTAL-10",
+    "variants": [
+      {
+        "title": "Pack of 10",
+        "unit": "10 cigarettes",
+        "sku": "PAAN-VST-TOTAL-10",
+        "mrp": 95,
+        "price": 85,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://tpackss.globaltobaccocontrol.org/sites/default/files/styles/500x500/public/pack_images/IND_DEL_H2_04_007_0_0_2_3.JPG?itok=WL4dVojE"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 10 cigarettes",
+      "Manufacturer: VST Industries Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["total", "vst", "cigarettes", "paan corner", "10 pack"],
+    "manufacturer": "VST Industries Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Charms Virginia Filter Cigarettes",
+    "slug": "charms-virginia-filter-cigarettes-10",
+    "description": "Charms Virginia Filter pack containing 10 cigarettes from VST Industries. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Charms",
+    "image": "https://tpackss.globaltobaccocontrol.org/sites/default/files/styles/500x500/public/pack_images/IND_CHI_L2_03_001_0_0_2_3.JPG?itok=Iq3WXmbo",
+    "gallery": [
+      "https://tpackss.globaltobaccocontrol.org/sites/default/files/styles/500x500/public/pack_images/IND_CHI_L2_03_001_0_0_2_3.JPG?itok=Iq3WXmbo"
+    ],
+    "mrp": 57,
+    "price": 48,
+    "discount": 16,
+    "unit": "10 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-VST-CHARMS-10",
+    "variants": [
+      {
+        "title": "Pack of 10",
+        "unit": "10 cigarettes",
+        "sku": "PAAN-VST-CHARMS-10",
+        "mrp": 57,
+        "price": 48,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://tpackss.globaltobaccocontrol.org/sites/default/files/styles/500x500/public/pack_images/IND_CHI_L2_03_001_0_0_2_3.JPG?itok=Iq3WXmbo"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 10 cigarettes",
+      "Manufacturer: VST Industries Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["charms", "virginia filter", "vst", "cigarettes", "paan corner"],
+    "manufacturer": "VST Industries Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Gold Flake Superstar Cigarettes",
+    "slug": "gold-flake-superstar-cigarettes-10",
+    "description": "Gold Flake Superstar pack containing 10 filter cigarettes from ITC. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Gold Flake",
+    "image": "https://www.bbassets.com/media/uploads/p/xl/40346545_1-gold-flake-superstar.jpg",
+    "gallery": [
+      "https://www.bbassets.com/media/uploads/p/xl/40346545_1-gold-flake-superstar.jpg"
+    ],
+    "mrp": 95,
+    "price": 85,
+    "discount": 11,
+    "unit": "10 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-ITC-GF-SUPERSTAR-10",
+    "variants": [
+      {
+        "title": "Pack of 10",
+        "unit": "10 cigarettes",
+        "sku": "PAAN-ITC-GF-SUPERSTAR-10",
+        "mrp": 95,
+        "price": 85,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://www.bbassets.com/media/uploads/p/xl/40346545_1-gold-flake-superstar.jpg"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 10 cigarettes",
+      "Manufacturer: ITC Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["gold flake", "superstar", "itc", "cigarettes", "paan corner"],
+    "manufacturer": "ITC Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Gold Flake Premium Filter Cigarettes",
+    "slug": "gold-flake-premium-filter-cigarettes-10",
+    "description": "Gold Flake Premium Filter pack containing 10 cigarettes from ITC. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Gold Flake",
+    "image": "https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=1080/da/cms-assets/cms/product/83370a7e-d8a1-449d-9852-f6f12e69bff1.png",
+    "gallery": [
+      "https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=1080/da/cms-assets/cms/product/83370a7e-d8a1-449d-9852-f6f12e69bff1.png"
+    ],
+    "mrp": 125,
+    "price": 110,
+    "discount": 12,
+    "unit": "10 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-ITC-GF-PREMIUM-10",
+    "variants": [
+      {
+        "title": "Pack of 10",
+        "unit": "10 cigarettes",
+        "sku": "PAAN-ITC-GF-PREMIUM-10",
+        "mrp": 125,
+        "price": 110,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=1080/da/cms-assets/cms/product/83370a7e-d8a1-449d-9852-f6f12e69bff1.png"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 10 cigarettes",
+      "Manufacturer: ITC Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["gold flake", "premium filter", "itc", "cigarettes", "paan corner"],
+    "manufacturer": "ITC Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Editions Cigarettes",
+    "slug": "vst-editions-cigarettes-10",
+    "description": "Editions pack containing 10 cigarettes from VST Industries. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Editions",
+    "image": "https://storage.googleapis.com/shy-pub/226352/1697140427033_WhatsAppImage20231010at73757AM2.jpeg",
+    "gallery": [
+      "https://storage.googleapis.com/shy-pub/226352/1697140427033_WhatsAppImage20231010at73757AM2.jpeg"
+    ],
+    "mrp": 96,
+    "price": 85,
+    "discount": 11,
+    "unit": "10 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-VST-EDITIONS-10",
+    "variants": [
+      {
+        "title": "Pack of 10",
+        "unit": "10 cigarettes",
+        "sku": "PAAN-VST-EDITIONS-10",
+        "mrp": 96,
+        "price": 85,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://storage.googleapis.com/shy-pub/226352/1697140427033_WhatsAppImage20231010at73757AM2.jpeg"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 10 cigarettes",
+      "Manufacturer: VST Industries Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["editions", "vst", "cigarettes", "paan corner", "10 pack"],
+    "manufacturer": "VST Industries Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Gold Flake Indie Mint Cigarettes",
+    "slug": "gold-flake-indie-mint-cigarettes-10",
+    "description": "Gold Flake Indie Mint pack containing 10 cigarettes from ITC. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Gold Flake",
+    "image": "https://www.bbassets.com/media/uploads/p/xl/40321428_8-gold-flake-gold-flake-indiemint.jpg",
+    "gallery": [
+      "https://www.bbassets.com/media/uploads/p/xl/40321428_8-gold-flake-gold-flake-indiemint.jpg"
+    ],
+    "mrp": 120,
+    "price": 115,
+    "discount": 4,
+    "unit": "10 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-ITC-GF-INDIE-MINT-10",
+    "variants": [
+      {
+        "title": "Pack of 10",
+        "unit": "10 cigarettes",
+        "sku": "PAAN-ITC-GF-INDIE-MINT-10",
+        "mrp": 120,
+        "price": 115,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://www.bbassets.com/media/uploads/p/xl/40321428_8-gold-flake-gold-flake-indiemint.jpg"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 10 cigarettes",
+      "Manufacturer: ITC Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["gold flake", "indie mint", "itc", "cigarettes", "paan corner"],
+    "manufacturer": "ITC Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "American Club Cigarettes",
+    "slug": "american-club-cigarettes-10",
+    "description": "American Club pack containing 10 cigarettes from ITC. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "American Club",
+    "image": "https://dukaan.b-cdn.net/1000x1000/webp/913195/50629b30-d707-4752-875b-bc38ea89d811.png",
+    "gallery": [
+      "https://dukaan.b-cdn.net/1000x1000/webp/913195/50629b30-d707-4752-875b-bc38ea89d811.png"
+    ],
+    "mrp": 140,
+    "price": 100,
+    "discount": 29,
+    "unit": "10 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-ITC-AMERICAN-CLUB-10",
+    "variants": [
+      {
+        "title": "Pack of 10",
+        "unit": "10 cigarettes",
+        "sku": "PAAN-ITC-AMERICAN-CLUB-10",
+        "mrp": 140,
+        "price": 100,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://dukaan.b-cdn.net/1000x1000/webp/913195/50629b30-d707-4752-875b-bc38ea89d811.png"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 10 cigarettes",
+      "Manufacturer: ITC Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["american club", "itc", "cigarettes", "paan corner", "10 pack"],
+    "manufacturer": "ITC Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Four Square Filter Cigarettes",
+    "slug": "four-square-filter-cigarettes-10",
+    "description": "Four Square Filter pack containing 10 cigarettes from Godfrey Phillips India. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Four Square",
+    "image": "https://tpackss.globaltobaccocontrol.org/sites/default/files/styles/500x500/public/pack_images/IND_MUM_M3_01_010_0_0_2_7.JPG?itok=33cariAE",
+    "gallery": [
+      "https://tpackss.globaltobaccocontrol.org/sites/default/files/styles/500x500/public/pack_images/IND_MUM_M3_01_010_0_0_2_7.JPG?itok=33cariAE"
+    ],
+    "mrp": 85,
+    "price": 78,
+    "discount": 8,
+    "unit": "10 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-GPI-FOUR-SQUARE-10",
+    "variants": [
+      {
+        "title": "Pack of 10",
+        "unit": "10 cigarettes",
+        "sku": "PAAN-GPI-FOUR-SQUARE-10",
+        "mrp": 85,
+        "price": 78,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://tpackss.globaltobaccocontrol.org/sites/default/files/styles/500x500/public/pack_images/IND_MUM_M3_01_010_0_0_2_7.JPG?itok=33cariAE"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 10 cigarettes",
+      "Manufacturer: Godfrey Phillips India Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["four square", "godfrey phillips", "filter cigarettes", "paan corner", "10 pack"],
+    "manufacturer": "Godfrey Phillips India Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
+  },
+  {
+    "name": "Classic Cigarettes",
+    "slug": "classic-cigarettes-20",
+    "description": "Classic pack containing 20 cigarettes from ITC. For sale only to adults; smoking is injurious to health.",
+    "category": "Paan Corner",
+    "categorySlug": "paan-corner",
+    "subcategorySlug": "cigarettes",
+    "brand": "Classic",
+    "image": "https://cdn.dotpe.in/longtail/item_thumbnails/9380477/Xewyuwnt-500-500.webp",
+    "gallery": [
+      "https://cdn.dotpe.in/longtail/item_thumbnails/9380477/Xewyuwnt-500-500.webp"
+    ],
+    "mrp": 340,
+    "price": 320,
+    "discount": 6,
+    "unit": "20 cigarettes",
+    "rating": 0,
+    "ratingCount": 0,
+    "stock": 0,
+    "reservedStock": 0,
+    "totalStock": 0,
+    "availableStock": 0,
+    "sku": "PAAN-ITC-CLASSIC-20",
+    "variants": [
+      {
+        "title": "Pack of 20",
+        "unit": "20 cigarettes",
+        "sku": "PAAN-ITC-CLASSIC-20",
+        "mrp": 340,
+        "price": 320,
+        "stock": 0,
+        "reservedStock": 0,
+        "images": [
+          "https://cdn.dotpe.in/longtail/item_thumbnails/9380477/Xewyuwnt-500-500.webp"
+        ],
+        "isDefault": true,
+        "isActive": true
+      }
+    ],
+    "highlights": [
+      "Pack size: 20 cigarettes",
+      "Manufacturer: ITC Limited",
+      "Adults only (18+)",
+      "Caution: smoking is injurious to health"
+    ],
+    "tags": ["classic", "itc", "cigarettes", "paan corner", "20 pack"],
+    "manufacturer": "ITC Limited",
+    "countryOfOrigin": "India",
+    "shelfLife": "Refer to package",
+    "storageInstructions": "Store in a cool, dry place away from sunlight and moisture. Keep out of reach of children.",
+    "isVegetarian": false,
+    "isFeatured": false,
+    "isActive": true,
+    "popularity": 0,
+    "taxRate": 0
   }
 ]

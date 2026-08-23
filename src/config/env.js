@@ -84,6 +84,9 @@ const envSchema = z.object({
     ].forEach(([field, value, minimum]) => {
       if (!value || value.length < minimum || isPlaceholder(value)) issue(field, 'is not configured for production payments');
     });
+    if (data.RAZORPAY_KEY_ID && !data.RAZORPAY_KEY_ID.startsWith('rzp_live_')) {
+      issue('RAZORPAY_KEY_ID', 'must be a Live Mode key (rzp_live_...) in production');
+    }
     if (data.WHATSAPP_PROVIDER !== 'meta') issue('WHATSAPP_PROVIDER', 'must be meta in production');
     if (!data.OTP_WORKER_ENABLED) issue('OTP_WORKER_ENABLED', 'must be true in production');
     [

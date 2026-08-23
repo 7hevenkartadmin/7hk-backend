@@ -22,7 +22,7 @@ export const idempotencyKeySchema = z.string().trim().min(16).max(128).regex(/^[
 export const paymentSessionIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/);
 
 export const verifyPaymentSchema = z.object({
-  paymentSessionId: paymentSessionIdSchema.optional(),
+  paymentSessionId: paymentSessionIdSchema,
   razorpay_order_id: z.string().regex(/^order_[A-Za-z0-9]+$/),
   razorpay_payment_id: z.string().regex(/^pay_[A-Za-z0-9]+$/),
   razorpay_signature: z.string().regex(/^[a-fA-F0-9]{64}$/),

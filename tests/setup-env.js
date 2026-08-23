@@ -6,3 +6,6 @@ process.env.OTP_HMAC_SECRET = 'synthetic-otp-hmac-secret-123456789012345';
 process.env.WHATSAPP_PROVIDER = 'disabled';
 process.env.OTP_WORKER_ENABLED = 'false';
 process.env.COOKIE_SECURE = 'false';
+process.env.RAZORPAY_KEY_ID = 'rzp_test_synthetic';
+process.env.RAZORPAY_KEY_SECRET = 'synthetic-payment-secret-12345';
+process.env.RAZORPAY_WEBHOOK_SECRET = 'synthetic-webhook-secret-12345';

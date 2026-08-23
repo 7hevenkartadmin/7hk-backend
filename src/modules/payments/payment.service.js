@@ -19,6 +19,7 @@ import { Payment } from './payment.model.js';
 export const CHECKOUT_TTL_MS = 15 * 60 * 1000;
 export const CAPTURED_RESERVATION_GRACE_MS = 30 * 60 * 1000;
 export const AUTHORIZED_RESERVATION_MAX_MS = 30 * 60 * 1000;
+export const MIN_RAZORPAY_ORDER_AMOUNT_PAISE = 100;
 const AUTHORIZED_RESERVATION_GRACE_MS = 10 * 60 * 1000;
 const PROVIDER_TIMEOUT_MS = 10000;
 const REFUND_RECONCILE_DELAY_MS = 60 * 1000;
@@ -83,6 +84,13 @@ function dedupeKey(userId, cartHash) {
 
 function sameId(left, right) {
   return String(left || '') === String(right || '');
+}
+
+export function assertRazorpayOrderAmount(amountPaise) {
+  if (!Number.isSafeInteger(amountPaise) || amountPaise < MIN_RAZORPAY_ORDER_AMOUNT_PAISE) {
+    throw new AppError('Online payment amount must be at least Rs. 1.00', 422, 'PAYMENT_AMOUNT_TOO_LOW');
+  }
+  return amountPaise;
 }
 
 function assertIntentMatches(intent, { cartHash, amountPaise, addressId, slotId }) {
@@ -301,7 +309,7 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
   await assertStoreAcceptingOrders({ distanceKm: address.distanceFromStoreKm });
   const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(address.distanceFromStoreKm, defaultDeliveryFee(subtotalOnly));
   const totals = calculateCartTotals({ items, couponDiscount: discount, deliveryFee });
-  const amountPaise = Math.round(totals.total * 100);
+  const amountPaise = assertRazorpayOrderAmount(Math.round(totals.total * 100));
   const cartHash = createCartHash(payload.items, payload.couponCode, totals.total, payload.addressId, payload.slotId);
   const expected = { cartHash, amountPaise, addressId: payload.addressId, slotId: payload.slotId };
   const checkoutSnapshot = {
@@ -380,8 +388,7 @@ function timingSafeHexEqual(expected, received) {
 
 export function verifyRazorpaySignature(payload, trustedOrderId = payload.razorpay_order_id) {
   if (!env.RAZORPAY_KEY_SECRET) {
-    if (env.NODE_ENV === 'production') throw new AppError('Online payments are not configured', 503, 'PAYMENT_CONFIG_MISSING');
-    return;
+    throw new AppError('Online payments are not configured', 503, 'PAYMENT_CONFIG_MISSING');
   }
   if (payload.razorpay_order_id !== trustedOrderId) throw new AppError('Payment order does not match the checkout session', 400, 'PAYMENT_ORDER_MISMATCH');
   const expected = crypto.createHmac('sha256', env.RAZORPAY_KEY_SECRET)

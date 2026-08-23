@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { authorize } from '../src/modules/auth/auth.middleware.js';
-import { createCartHash, validateProviderPayment, verifyRazorpaySignature } from '../src/modules/payments/payment.service.js';
+import {
+  assertRazorpayOrderAmount,
+  createCartHash,
+  validateProviderPayment,
+  verifyRazorpaySignature,
+} from '../src/modules/payments/payment.service.js';
 import { extractRazorpayWebhookPayment, isValidRazorpayWebhookSignature } from '../src/modules/payments/razorpay.webhook.js';
 import { hashToken, signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken } from '../src/modules/auth/token.service.js';
 import { env } from '../src/config/env.js';
@@ -66,15 +71,6 @@ test('payment cart hash changes when coupon, quantity, total, delivery address, 
 });
 
 test('razorpay signature verification rejects tampered payload when secret is configured', () => {
-  if (!env.RAZORPAY_KEY_SECRET) {
-    assert.doesNotThrow(() => verifyRazorpaySignature({
-      razorpay_order_id: 'order_123',
-      razorpay_payment_id: 'pay_123',
-      razorpay_signature: 'development-mock-signature',
-    }));
-    return;
-  }
-
   const payload = {
     razorpay_order_id: 'order_123',
     razorpay_payment_id: 'pay_123',
@@ -86,6 +82,13 @@ test('razorpay signature verification rejects tampered payload when secret is co
 
   assert.doesNotThrow(() => verifyRazorpaySignature({ ...payload, razorpay_signature: validSignature }));
   assert.throws(() => verifyRazorpaySignature({ ...payload, razorpay_signature: 'tampered' }), /Payment signature verification failed/);
+});
+
+test('Razorpay order amount is a safe integer of at least one rupee', () => {
+  assert.equal(assertRazorpayOrderAmount(100), 100);
+  for (const invalid of [0, 99, 100.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => assertRazorpayOrderAmount(invalid), /at least Rs\. 1\.00/);
+  }
 });
 
 test('provider confirmation must match order, amount, and currency before capture is trusted', () => {

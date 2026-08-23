@@ -10,12 +10,17 @@ Set these only on the backend:
     RAZORPAY_KEY_SECRET=...
     RAZORPAY_WEBHOOK_SECRET=...
 
+`NODE_ENV=production` rejects Test Mode key IDs. Use a rotated `rzp_live_...` key only after the complete staging flow has passed. Never reuse the API key secret as the webhook secret.
+
 In the Razorpay Dashboard:
 
 1. Enable automatic payment capture.
 2. Add https://YOUR_API_HOST/api/v1/webhooks/razorpay as a webhook.
 3. Subscribe to payment.authorized, payment.captured, payment.failed, order.paid, and refund.processed.
 4. Use a dedicated webhook secret, different from the API key secret.
+5. Verify the public webhook URL returns `200` for valid events and `401` for an invalid signature.
+
+Plan webhook-secret rotations around pending retries: Razorpay signs a retried older delivery with the secret that was active for that delivery.
 
 Production MongoDB must support transactions (Atlas or a replica set). The API intentionally refuses unsafe non-transactional online-order finalisation in production.
 
@@ -41,11 +46,15 @@ Production MongoDB must support transactions (Atlas or a replica set). The API i
 
 Keep the same idempotency key while retrying this operation. Do not generate a new key after a timeout. The response contains sessionId, public keyId, Razorpay orderId, amountPaise, currency, status, and expiresAt.
 
+The backend rejects online totals below 100 paise before creating a provider order or retaining a checkout reservation. Clients must display the returned `amountPaise`; they must not calculate or override it.
+
 Only keyId is sent to clients. The API key secret and webhook secret must never be bundled into the web or Android app.
 
 ### 2. Open Razorpay Checkout
 
 For Expo, install react-native-razorpay, create a development/production build with expo prebuild, and pass keyId, orderId, amountPaise, and currency to the native checkout. The native SDK does not run inside Expo Go.
+
+For a native Android application, use the current Razorpay Standard Checkout SDK, set the public `keyId`, and pass the backend response as `order_id`, `amount`, and `currency`. Send the three success callback fields to the shared verification endpoint below. On `onPaymentError`, keep `sessionId`, show a retryable message, and reconcile before creating another session whenever the result is uncertain.
 
 ### 3. Verify the checkout callback
 
@@ -60,6 +69,8 @@ For Expo, install react-native-razorpay, create a development/production build w
     }
 
 The backend verifies the signature using the Razorpay Order ID stored in its database and fetches the payment from Razorpay. A session becomes verified only when the payment/order/amount/currency match and the payment is captured.
+
+`paymentSessionId` is mandatory. It binds the callback to the authenticated customer's internal checkout and prevents a client from asking the server to trust a provider order ID by itself.
 
 ### 4. Recover from a lost callback or slow capture
 
@@ -94,3 +105,21 @@ The server retains the price, coupon, tax, delivery-fee, and item snapshot that 
 - Never mark an order paid from the SDK callback alone.
 - Do not log signatures, API secrets, complete provider payloads, card data, OTPs, or UPI credentials.
 - On an ambiguous timeout, reconcile first; do not start a second payment.
+- Treat modal dismissal as cancellation, not failure or success. Do not create the grocery order.
+- Treat `payment.failed` as an attempted-payment failure. The same Razorpay Order can support another attempt while its inventory reservation remains valid.
+- Do not let an Android Activity, web reload, or network loss discard `sessionId` until reconciliation reaches a terminal state.
+
+## Release test matrix
+
+Run these cases with Test Mode credentials on staging before switching to Live Mode:
+
+1. Successful UPI/card payment creates exactly one paid grocery order.
+2. Invalid signature returns `400` and creates no order.
+3. Modal dismissal creates no order and a retry resumes the same active checkout.
+4. Provider decline shows an error and creates no paid order.
+5. Client timeout after payment succeeds is recovered through reconciliation without a second payment.
+6. Duplicate verification, order-creation, and webhook requests remain idempotent.
+7. A captured payment that cannot be fulfilled releases stock, slot, and coupon and enters the automatic refund path.
+8. Duplicate and out-of-order webhooks do not regress a captured or consumed payment.
+9. Expired unpaid sessions release all reservations.
+10. A cancelled paid order is refunded once and its refund webhook updates the order ledger.
