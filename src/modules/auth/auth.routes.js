@@ -10,6 +10,11 @@ import { login, logout, refreshSession, registerCustomer, requestOtp, resendOtp,
 import { requireAuth } from './auth.middleware.js';
 import { tokenLifetimeMs } from './token.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import {
+  accessCookieName,
+  authContextForRole,
+  refreshCookieName,
+} from './auth.cookies.js';
 
 export const authRoutes = Router();
 
@@ -20,18 +25,18 @@ const cookieOptions = {
 };
 
 const refreshCookiePath = `/api/${env.API_VERSION}/auth`;
-const refreshCookieName = (role = 'customer') => role === 'customer' ? 'customerRefreshToken' : 'adminRefreshToken';
 
 export function attachCookies(res, tokens, currentTimeMs = Date.now(), role = 'customer') {
   const accessMaxAge = tokenLifetimeMs(tokens.accessToken, currentTimeMs);
   const refreshMaxAge = tokenLifetimeMs(tokens.refreshToken, currentTimeMs);
+  const authContext = authContextForRole(role);
 
-  res.cookie('accessToken', tokens.accessToken, {
+  res.cookie(accessCookieName(authContext), tokens.accessToken, {
     ...cookieOptions,
     path: '/',
     maxAge: accessMaxAge,
   });
-  res.cookie(refreshCookieName(role), tokens.refreshToken, {
+  res.cookie(refreshCookieName(authContext), tokens.refreshToken, {
     ...cookieOptions,
     path: refreshCookiePath,
     maxAge: refreshMaxAge,
@@ -65,13 +70,16 @@ async function refreshForRole(req, res, expectedRole) {
   const result = await refreshSession(req.cookies?.[refreshCookieName(expectedRole)]);
   const validRole = expectedRole === 'customer'
     ? result.user.role === 'customer'
-    : ['admin', 'manager', 'support'].includes(result.user.role);
+    : expectedRole === 'owner'
+      ? result.user.role === 'owner'
+      : ['admin', 'manager', 'support'].includes(result.user.role);
   if (!validRole) throw new AppError('Refresh token role does not match this application', 403, 'FORBIDDEN');
   sendSession(res, result, 'Session refreshed');
 }
 
 authRoutes.post('/refresh/customer', authRateLimiter, validate(refreshSchema), asyncHandler((req, res) => refreshForRole(req, res, 'customer')));
 authRoutes.post('/refresh/admin', authRateLimiter, validate(refreshSchema), asyncHandler((req, res) => refreshForRole(req, res, 'admin')));
+authRoutes.post('/refresh/owner', authRateLimiter, validate(refreshSchema), asyncHandler((req, res) => refreshForRole(req, res, 'owner')));
 
 authRoutes.post('/otp/request', otpRateLimiter, validate(requestOtpSchema), asyncHandler(async (req, res) => {
   ok(
@@ -88,7 +96,8 @@ authRoutes.post('/otp/verify', authRateLimiter, validate(verifyOtpSchema), async
 
 authRoutes.post('/logout', requireAuth, asyncHandler(async (req, res) => {
   await logout(req.user.id);
-  res.clearCookie('accessToken', { ...cookieOptions, path: '/' });
-  res.clearCookie(refreshCookieName(req.user.role), { ...cookieOptions, path: refreshCookiePath });
+  const authContext = req.authContext || authContextForRole(req.user.role);
+  res.clearCookie(accessCookieName(authContext), { ...cookieOptions, path: '/' });
+  res.clearCookie(refreshCookieName(authContext), { ...cookieOptions, path: refreshCookiePath });
   ok(res, null, 'Logged out');
 }));

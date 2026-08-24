@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { parseStoreDate } from '../../shared/utils/storeDate.js';
 
 const bannerSchema = z.object({
-  title: z.string().min(2).max(140),
+  title: z.string().max(140).default(''),
   highlight: z.string().max(80).default(''),
   copy: z.string().max(360).default(''),
   tag: z.string().max(80).default(''),
-  image: z.string().url().optional().or(z.literal('')).default(''),
+  image: z.string().url('Upload a valid banner image'),
   ctaLabel: z.string().max(40).default('Shop Now'),
   ctaHref: z.string().max(160).default('#products'),
   isActive: z.boolean().default(true),

@@ -45,9 +45,9 @@ test('reserveSlot reports a stable unavailable-slot error when no slot is update
   });
 });
 
-test('createSlot delegates to DeliverySlot.create with the payload unchanged', async () => {
+test('createSlot converts an admin India date to the corresponding UTC instant', async () => {
   const payload = {
-    date: new Date('2026-07-01T00:00:00.000Z'),
+    date: '2026-07-01',
     startsAt: '10:00',
     endsAt: '12:00',
     capacity: 30,
@@ -55,10 +55,11 @@ test('createSlot delegates to DeliverySlot.create with the payload unchanged', a
   };
 
   await withStub(DeliverySlot, 'create', async (input) => {
-    assert.equal(input, payload);
+    assert.equal(input.date.toISOString(), '2026-06-30T18:30:00.000Z');
+    assert.equal(input.startsAt, payload.startsAt);
     return { _id: 'created-slot', ...input };
   }, async () => {
-    const slot = await createSlot(payload);
+    const slot = await createSlot(payload, { at: new Date('2026-06-30T06:30:00.000Z') });
 
     assert.equal(slot._id, 'created-slot');
     assert.equal(slot.capacity, 30);
@@ -88,7 +89,7 @@ test('updateSlot rejects capacity below bookings before saving', async () => {
   });
 });
 
-test('listAvailableSlots creates same-day defaults and filters by area and date', async () => {
+test('listAvailableSlots returns only admin-created same-day slots without creating defaults', async () => {
   const at = new Date('2026-08-18T06:30:00.000Z');
   const calls = [];
   const queryChain = {
@@ -98,23 +99,19 @@ test('listAvailableSlots creates same-day defaults and filters by area and date'
     },
   };
 
-  await withStub(StoreSettings, 'findOneAndUpdate', async () => ({}), async () => withStub(DeliverySlot, 'bulkWrite', async (operations, options) => {
-    calls.push(['bulkWrite', operations, options]);
-  }, async () => withStub(DeliverySlot, 'find', (filter) => {
+  await withStub(StoreSettings, 'findOneAndUpdate', async () => ({}), async () => withStub(DeliverySlot, 'find', (filter) => {
     calls.push(['find', filter]);
     return queryChain;
   }, async () => {
     const slots = await listAvailableSlots({ serviceArea: 'Patna', date: storeDateKey(at) }, { at });
 
     assert.deepEqual(slots, [{ _id: 'slot-1' }]);
-    assert.equal(calls[0][0], 'bulkWrite');
-    assert.equal(calls[0][2].ordered, false);
-    assert.equal(calls[1][0], 'find');
-    assert.equal(calls[1][1].isActive, true);
-    assert.equal(calls[1][1].serviceArea, 'Patna');
-    assert.deepEqual(calls[1][1].$expr, { $lt: ['$booked', '$capacity'] });
-    assert.ok(calls[1][1].date.$gte instanceof Date);
-    assert.ok(calls[1][1].date.$lt instanceof Date);
-    assert.deepEqual(calls[2], ['sort', { date: 1, startsAt: 1 }]);
-  })));
+    assert.equal(calls[0][0], 'find');
+    assert.equal(calls[0][1].isActive, true);
+    assert.equal(calls[0][1].serviceArea, 'Patna');
+    assert.deepEqual(calls[0][1].$expr, { $lt: ['$booked', '$capacity'] });
+    assert.ok(calls[0][1].date.$gte instanceof Date);
+    assert.ok(calls[0][1].date.$lt instanceof Date);
+    assert.deepEqual(calls[1], ['sort', { date: 1, startsAt: 1 }]);
+  }));
 });

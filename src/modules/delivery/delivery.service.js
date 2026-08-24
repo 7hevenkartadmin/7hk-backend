@@ -1,57 +1,20 @@
 import { DeliverySlot } from './deliverySlot.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { parseStoreDate, storeDateKey, todayStoreRange } from '../../shared/utils/storeDate.js';
+import { parseStoreDate, storeDateKey, todayStoreRange, STORE_TIMEZONE } from '../../shared/utils/storeDate.js';
 import { getStoreAvailability } from '../settings/storeAvailability.service.js';
-
-const defaultWindows = [
-  ['08:00', '10:00'],
-  ['10:00', '12:00'],
-  ['12:00', '14:00'],
-  ['14:00', '16:00'],
-  ['16:00', '18:00'],
-  ['18:00', '20:00'],
-];
 
 function currentStoreTime(at = new Date()) {
   return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    timeZone: STORE_TIMEZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).format(at);
 }
 
-async function ensureTodaySlots(serviceArea = 'Patna', at = new Date()) {
-  const operations = [];
-  const date = parseStoreDate(storeDateKey(at)).start;
-  const nowTime = currentStoreTime(at);
-  for (const [startsAt, endsAt] of defaultWindows) {
-    if (endsAt <= nowTime) continue;
-    operations.push({
-      updateOne: {
-        filter: { date, startsAt, serviceArea },
-        update: {
-          $setOnInsert: {
-            date,
-            startsAt,
-            endsAt,
-            serviceArea,
-            capacity: 50,
-            booked: 0,
-            isActive: true,
-          },
-        },
-        upsert: true,
-      },
-    });
-  }
-  if (operations.length) await DeliverySlot.bulkWrite(operations, { ordered: false });
-}
-
 export async function listAvailableSlots(query = {}, { at = new Date() } = {}) {
-  if (query.date && storeDateKey(new Date(query.date)) !== storeDateKey(at)) {
+  if (query.date && query.date !== storeDateKey(at)) {
     throw new AppError('Only same-day delivery is available', 422, 'SAME_DAY_DELIVERY_ONLY');
   }
   const availability = await getStoreAvailability({ distanceKm: query.distanceKm, at });
   if (!availability.acceptingOrders) return [];
-  await ensureTodaySlots(query.serviceArea || 'Patna', at);
   const today = parseStoreDate(storeDateKey(at));
   const filter = {
     date: { $gte: today.start, $lt: today.end },
@@ -63,8 +26,24 @@ export async function listAvailableSlots(query = {}, { at = new Date() } = {}) {
   return DeliverySlot.find(filter).sort({ date: 1, startsAt: 1 });
 }
 
-export async function createSlot(payload) {
-  return DeliverySlot.create(payload);
+export async function createSlot(payload, { at = new Date() } = {}) {
+  const range = parseStoreDate(payload.date);
+  if (!range) throw new AppError('Choose a valid delivery date', 422, 'INVALID_DELIVERY_DATE');
+  const currentStoreDay = parseStoreDate(storeDateKey(at));
+  if (range.end <= currentStoreDay.start) {
+    throw new AppError('Delivery slots cannot be created for a past India date', 422, 'DELIVERY_DATE_IN_PAST');
+  }
+  if (storeDateKey(range.start) === storeDateKey(at) && payload.endsAt <= currentStoreTime(at)) {
+    throw new AppError('Delivery slot must end after the current India time', 422, 'DELIVERY_SLOT_IN_PAST');
+  }
+  try {
+    return await DeliverySlot.create({ ...payload, date: range.start });
+  } catch (error) {
+    if (error?.code === 11000) {
+      throw new AppError('A delivery slot already exists for this date, time and service area', 409, 'DELIVERY_SLOT_EXISTS');
+    }
+    throw error;
+  }
 }
 
 export async function listAdminSlots() {

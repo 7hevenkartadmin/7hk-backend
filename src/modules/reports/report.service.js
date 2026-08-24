@@ -2,6 +2,7 @@ import { env } from '../../config/env.js';
 import { Product } from '../catalog/product.model.js';
 import { Order } from '../orders/order.model.js';
 import { User } from '../users/user.model.js';
+import { parseStoreDate } from '../../shared/utils/storeDate.js';
 
 export async function dashboardSummary() {
   const [orders, revenue, customers, lowStock] = await Promise.all([
@@ -39,14 +40,14 @@ export async function salesReport({ from, to, startDate, endDate, period = 'dail
   const upper = to || endDate;
   if (lower || upper) {
     match.createdAt = {};
-    if (lower) match.createdAt.$gte = new Date(lower);
-    if (upper) match.createdAt.$lte = new Date(upper);
+    if (lower) match.createdAt.$gte = parseStoreDate(lower).start;
+    if (upper) match.createdAt.$lt = parseStoreDate(upper).end;
   }
   return Order.aggregate([
     { $match: { ...match, status: { $ne: 'cancelled' }, paymentStatus: { $nin: ['failed', 'refunded'] } } },
     {
       $group: {
-        _id: { $dateToString: { format: periodFormats[period] || periodFormats.daily, date: '$createdAt' } },
+        _id: { $dateToString: { format: periodFormats[period] || periodFormats.daily, date: '$createdAt', timezone: 'Asia/Kolkata' } },
         revenue: { $sum: '$total' },
         orders: { $sum: 1 },
       },

@@ -103,7 +103,6 @@ async function writeMovements(items, orderId, type, quantitySign, actorId, reaso
     reason,
   
   }));
-  console.log(rows);
   return InventoryMovement.insertMany(rows, { session });
 }
 

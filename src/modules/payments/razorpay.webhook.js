@@ -7,6 +7,8 @@ import { Payment } from './payment.model.js';
 import { applyRazorpayRefund, applyRazorpayWebhookPayment, initiateOrderRefund } from './payment.service.js';
 import { PaymentWebhookEvent } from './paymentWebhookEvent.model.js';
 
+export const WEBHOOK_PROCESSING_LEASE_MS = 5 * 60 * 1000;
+
 function timingSafeSignature(expected, received) {
   if (!/^[a-f0-9]{64}$/i.test(String(received || ''))) return false;
   const expectedBuffer = Buffer.from(expected, 'hex');
@@ -57,7 +59,7 @@ export async function processWebhook(payload) {
   return false;
 }
 
-async function recordAndProcess(eventId, payload) {
+export async function recordAndProcess(eventId, payload, { now = new Date() } = {}) {
   let record;
   try {
     record = await PaymentWebhookEvent.create({
@@ -69,11 +71,26 @@ async function recordAndProcess(eventId, payload) {
     });
   } catch (error) {
     if (error?.code !== 11000) throw error;
-    record = await PaymentWebhookEvent.findOne({ eventId });
-    if (!record || ['processed', 'ignored', 'processing'].includes(record.status)) return;
-    record.status = 'processing';
-    record.failure = undefined;
-    await record.save();
+    record = await PaymentWebhookEvent.findOneAndUpdate(
+      {
+        eventId,
+        $or: [
+          { status: 'failed' },
+          { status: 'processing', updatedAt: { $lte: new Date(now.getTime() - WEBHOOK_PROCESSING_LEASE_MS) } },
+        ],
+      },
+      {
+        $set: {
+          status: 'processing',
+          eventType: payload.event || 'unknown',
+          providerOrderId: extractRazorpayWebhookPayment(payload)?.order_id,
+          providerPaymentId: extractRazorpayWebhookPayment(payload)?.id,
+        },
+        $unset: { failure: 1, processedAt: 1 },
+      },
+      { new: true },
+    );
+    if (!record) return;
   }
 
   try {

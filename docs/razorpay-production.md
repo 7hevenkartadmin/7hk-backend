@@ -41,12 +41,15 @@ Production MongoDB must support transactions (Atlas or a replica set). The API i
         }
       ],
       "couponCode": "SAVE10",
-      "addressId": "507f1f77bcf86cd799439013"
+      "addressId": "507f1f77bcf86cd799439013",
+      "slotId": "507f1f77bcf86cd799439014"
     }
 
 Keep the same idempotency key while retrying this operation. Do not generate a new key after a timeout. The response contains sessionId, public keyId, Razorpay orderId, amountPaise, currency, status, and expiresAt.
 
-The backend rejects online totals below 100 paise before creating a provider order or retaining a checkout reservation. Clients must display the returned `amountPaise`; they must not calculate or override it.
+The backend rejects online totals below 100 paise before creating a provider order or retaining a checkout reservation. Creation is limited to 6 requests per customer per 15 minutes and at most 3 active held sessions. Known idempotency/cart retries are resumed before the active-session count. Clients must display the returned `amountPaise`; they must not calculate or override it.
+
+The active-session count is defense in depth, not a serialized per-customer semaphore. The rate limiter is process-local unless deployment supplies a shared store. Multi-instance deployments must use a shared limiter store; if a mathematically strict concurrent session maximum is required, add transactionally claimed per-user lease slots with a unique `(user, leaseSlot)` index.
 
 Only keyId is sent to clients. The API key secret and webhook secret must never be bundled into the web or Android app.
 
@@ -95,7 +98,13 @@ The reconcile endpoint fetches payments for the Razorpay Order server-to-server.
 
 The same payment session can create at most one order. Retrying this request after a network timeout returns the already-created order instead of decrementing inventory, consuming the slot, or charging again.
 
-The server retains the price, coupon, tax, delivery-fee, and item snapshot that was approved at payment time. If an item or saved address becomes permanently unavailable after capture, the backend initiates one full, receipt-idempotent refund and exposes the refund state on the payment session.
+The server retains the price, coupon, tax, delivery-fee, item, delivery-address, and delivery-window snapshot approved at payment time. Paid finalization recalculates distance from the immutable coordinates, not mutable saved-address fields, and displays the paid slot window rather than later staff edits. If a required snapshot is missing or fulfillment becomes permanently unavailable after capture, the backend initiates one full, receipt-idempotent refund and exposes the refund state on the payment session.
+
+### 6. Abandon a confirmed-unpaid checkout
+
+    POST /api/v1/payments/razorpay/sessions/:sessionId/abandon
+
+Use this when the customer dismisses an unpaid checkout or changes cart, coupon, address, or slot. The backend reconciles `created` sessions before releasing stock, slot, and coupon holds. Never call this as a reset for an authorized, verified, processing, consumed, or refund-state session; reconcile those states instead.
 
 ## Client rules
 
@@ -105,7 +114,7 @@ The server retains the price, coupon, tax, delivery-fee, and item snapshot that 
 - Never mark an order paid from the SDK callback alone.
 - Do not log signatures, API secrets, complete provider payloads, card data, OTPs, or UPI credentials.
 - On an ambiguous timeout, reconcile first; do not start a second payment.
-- Treat modal dismissal as cancellation, not failure or success. Do not create the grocery order.
+- Treat modal dismissal as cancellation, not failure or success. Reconcile, then abandon only if the backend confirms the session is unpaid. Do not create the grocery order.
 - Treat `payment.failed` as an attempted-payment failure. The same Razorpay Order can support another attempt while its inventory reservation remains valid.
 - Do not let an Android Activity, web reload, or network loss discard `sessionId` until reconciliation reaches a terminal state.
 
@@ -115,7 +124,7 @@ Run these cases with Test Mode credentials on staging before switching to Live M
 
 1. Successful UPI/card payment creates exactly one paid grocery order.
 2. Invalid signature returns `400` and creates no order.
-3. Modal dismissal creates no order and a retry resumes the same active checkout.
+3. Modal dismissal creates no order; reconciliation plus abandonment safely releases its holds.
 4. Provider decline shows an error and creates no paid order.
 5. Client timeout after payment succeeds is recovered through reconciliation without a second payment.
 6. Duplicate verification, order-creation, and webhook requests remain idempotent.
@@ -123,3 +132,5 @@ Run these cases with Test Mode credentials on staging before switching to Live M
 8. Duplicate and out-of-order webhooks do not regress a captured or consumed payment.
 9. Expired unpaid sessions release all reservations.
 10. A cancelled paid order is refunded once and its refund webhook updates the order ledger.
+11. A stale webhook record left in `processing` is atomically reclaimed after its five-minute lease.
+12. A different authenticated customer cannot read, verify, reconcile, abandon, or consume the session.

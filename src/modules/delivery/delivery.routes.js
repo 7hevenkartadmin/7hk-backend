@@ -12,14 +12,14 @@ deliveryRoutes.get('/', validate(deliverySlotsQuerySchema, 'query'), asyncHandle
   ok(res, { slots: await listAvailableSlots(req.query) }, 'Delivery slots loaded');
 }));
 
-deliveryRoutes.get('/admin', requireAuth, authorize('admin', 'manager'), asyncHandler(async (_req, res) => {
+deliveryRoutes.get('/admin', requireAuth, authorize('admin'), asyncHandler(async (_req, res) => {
   ok(res, { slots: await listAdminSlots() }, 'Admin delivery slots loaded');
 }));
 
-deliveryRoutes.post('/', requireAuth, authorize('admin', 'manager'), validate(deliverySlotSchema), asyncHandler(async (req, res) => {
+deliveryRoutes.post('/', requireAuth, authorize('admin'), validate(deliverySlotSchema), asyncHandler(async (req, res) => {
   created(res, { slot: await createSlot(req.body) }, 'Delivery slot created');
 }));
 
-deliveryRoutes.patch('/:id', requireAuth, authorize('admin', 'manager'), validate(deliverySlotUpdateSchema), asyncHandler(async (req, res) => {
+deliveryRoutes.patch('/:id', requireAuth, authorize('admin'), validate(deliverySlotUpdateSchema), asyncHandler(async (req, res) => {
   ok(res, { slot: await updateSlot(req.params.id, req.body) }, 'Delivery slot updated');
 }));

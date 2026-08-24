@@ -59,6 +59,31 @@ test('admin routes require authentication before returning data', async (t) => {
   assert.equal(body.code, 'AUTH_REQUIRED');
 });
 
+test('owner administrator lifecycle requires an authenticated owner', async (t) => {
+  const client = await createTestClient();
+  t.after(() => client.close());
+
+  const { response, body } = await client.request('/api/v1/owner/admin');
+
+  assert.equal(response.status, 401);
+  assert.equal(body.success, false);
+  assert.equal(body.code, 'AUTH_REQUIRED');
+});
+
+test('public administrator credential links reject malformed token input before database access', async (t) => {
+  const client = await createTestClient();
+  t.after(() => client.close());
+
+  const { response, body } = await client.request('/api/v1/auth/admin/setup', {
+    method: 'POST',
+    body: JSON.stringify({ token: 'short', password: 'a sufficiently long password' }),
+  });
+
+  assert.equal(response.status, 422);
+  assert.equal(body.success, false);
+  assert.equal(body.code, 'VALIDATION_ERROR');
+});
+
 test('invalid bearer token is rejected as an invalid session', async (t) => {
   const client = await createTestClient();
   t.after(() => client.close());
@@ -88,7 +113,7 @@ test('order quote route is protected before order calculations run', async (t) =
   assert.equal(body.code, 'AUTH_REQUIRED');
 });
 
-test('coupon apply route rejects invalid payload through route validation', async (t) => {
+test('coupon apply route requires customer authentication before validation or redemption lookup', async (t) => {
   const client = await createTestClient();
   t.after(() => client.close());
 
@@ -97,11 +122,9 @@ test('coupon apply route rejects invalid payload through route validation', asyn
     body: JSON.stringify({ code: 'A', subtotal: -1 }),
   });
 
-  assert.equal(response.status, 422);
+  assert.equal(response.status, 401);
   assert.equal(body.success, false);
-  assert.equal(body.code, 'VALIDATION_ERROR');
-  assert.ok(body.details.fieldErrors.code.length > 0);
-  assert.ok(body.details.fieldErrors.subtotal.length > 0);
+  assert.equal(body.code, 'AUTH_REQUIRED');
 });
 
 test('malformed JSON returns normalized client error', async (t) => {

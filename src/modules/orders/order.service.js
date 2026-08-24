@@ -1,11 +1,9 @@
 import mongoose from 'mongoose';
 import { customAlphabet } from 'nanoid';
 import { Product } from '../catalog/product.model.js';
-import { Coupon } from '../coupons/coupon.model.js';
 import {
   claimCoupon,
   consumeCouponReservation,
-  restoreConsumedCoupon,
   validateCoupon,
 } from '../coupons/coupon.service.js';
 import { releaseSlot, reserveSlot } from '../delivery/delivery.service.js';
@@ -69,6 +67,15 @@ function enforceDeliveryRadius(address) {
   }
   address.distanceFromStoreKm = Number(distance.toFixed(2));
   return address;
+}
+
+export function deliveryAddressForOrder(paymentMethod, currentAddress, checkoutSnapshot) {
+  const source = paymentMethod === 'razorpay' ? checkoutSnapshot?.deliveryAddress : currentAddress;
+  if (!source) {
+    throw new AppError('Payment session is missing its immutable delivery-address snapshot', 409, 'PAYMENT_SNAPSHOT_MISSING');
+  }
+  const address = typeof source.toObject === 'function' ? source.toObject() : source;
+  return enforceDeliveryRadius({ ...address });
 }
 
 function purchasableVariant(product, variantId) {
@@ -145,7 +152,7 @@ function applyCheckoutSnapshot(items, snapshot) {
 export async function quoteOrder(customer, payload) {
   const items = await hydrateItems(payload.items);
   const subtotalOnly = calculateCartTotals({ items }).subtotal;
-  const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly);
+  const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly, customer._id);
   const selectedAddress = payload.addressId ? await findOwnedAddress(customer._id, payload.addressId) : null;
   if (payload.addressId && !selectedAddress) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   await assertStoreAcceptingOrders({ distanceKm: selectedAddress?.distanceFromStoreKm });
@@ -187,7 +194,7 @@ export async function createOrder(customer, payload) {
   } catch (error) {
     if (error?.code !== 20 && !String(error?.message || '').includes('Transaction numbers are only allowed')) {
       if (payload.paymentMethod === 'razorpay'
-        && ['PRODUCT_NOT_FOUND', 'VARIANT_UNAVAILABLE', 'INVENTORY_RESERVATION_MISMATCH', 'ADDRESS_NOT_FOUND', 'OUT_OF_DELIVERY_RADIUS', 'SLOT_RESERVATION_MISSING'].includes(error?.code)) {
+        && ['PRODUCT_NOT_FOUND', 'VARIANT_UNAVAILABLE', 'INVENTORY_RESERVATION_MISMATCH', 'ADDRESS_NOT_FOUND', 'OUT_OF_DELIVERY_RADIUS', 'SLOT_RESERVATION_MISSING', 'COUPON_RESERVATION_MISMATCH', 'PAYMENT_SNAPSHOT_MISSING'].includes(error?.code)) {
         const refund = await refundUnfulfillablePayment(payload.paymentSessionId, customer, error.code);
         if (!refund) {
           throw new AppError('This payment is already being finalized by another request.', 409, 'PAYMENT_FINALIZATION_IN_PROGRESS');
@@ -221,29 +228,32 @@ async function performCreateOrder(customer, payload, session) {
   let paymentIntent;
   let items;
   let coupon;
+  let couponRedemption;
   let couponCode = payload.couponCode;
   let totals;
   let couponDiscount = 0;
   let subtotalOnly = 0;
   let slot;
+  let paymentPreview;
+  const orderObjectId = new mongoose.Types.ObjectId();
 
   if (payload.paymentMethod === 'razorpay') {
-    const preview = await getVerifiedPaymentIntentForOrder(payload.paymentSessionId, customer, session);
-    items = applyCheckoutSnapshot(await hydrateItems(payload.items, session, { checkAvailability: false }), preview.checkoutSnapshot);
-    totals = preview.checkoutSnapshot.totals;
-    couponCode = preview.checkoutSnapshot.couponCode || undefined;
-    slot = await getReservedSlotForIntent(preview, session);
+    paymentPreview = await getVerifiedPaymentIntentForOrder(payload.paymentSessionId, customer, session);
+    items = applyCheckoutSnapshot(await hydrateItems(payload.items, session, { checkAvailability: false }), paymentPreview.checkoutSnapshot);
+    totals = paymentPreview.checkoutSnapshot.totals;
+    couponCode = paymentPreview.checkoutSnapshot.couponCode || undefined;
+    slot = await getReservedSlotForIntent(paymentPreview, session);
   } else {
     items = await hydrateItems(payload.items, session);
     subtotalOnly = calculateCartTotals({ items }).subtotal;
-    const validatedCoupon = await validateCoupon(payload.couponCode, subtotalOnly);
+    const validatedCoupon = await validateCoupon(payload.couponCode, subtotalOnly, customer._id, session);
     coupon = validatedCoupon.coupon;
     couponDiscount = validatedCoupon.discount;
   }
 
   const address = await findOwnedAddress(customer._id, payload.addressId, session);
   if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
-  const deliveryAddress = enforceDeliveryRadius(typeof address.toObject === 'function' ? address.toObject() : address);
+  const deliveryAddress = deliveryAddressForOrder(payload.paymentMethod, address, paymentPreview?.checkoutSnapshot);
   if (payload.paymentMethod === 'cod') {
     const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(
       deliveryAddress.distanceFromStoreKm,
@@ -255,7 +265,17 @@ async function performCreateOrder(customer, payload, session) {
   if (payload.paymentMethod === 'cod') {
     await validateCodEligibility(customer, payload, totals);
     slot = await reserveSlot(payload.slotId, session);
-    if (coupon) coupon = await claimCoupon(coupon._id, subtotalOnly, session);
+    if (coupon) {
+      const claim = await claimCoupon({
+        couponId: coupon._id,
+        userId: customer._id,
+        subtotal: subtotalOnly,
+        session,
+        orderId: orderObjectId,
+      });
+      coupon = claim.coupon;
+      couponRedemption = claim.redemption;
+    }
   } else {
     paymentIntent = await consumeRazorpayPaymentIntent({
       customer,
@@ -269,7 +289,6 @@ async function performCreateOrder(customer, payload, session) {
     });
   }
 
-  const orderObjectId = new mongoose.Types.ObjectId();
   const [order] = await Order.create([{
     _id: orderObjectId,
     orderNumber: `ORD-${orderId()}`,
@@ -291,6 +310,7 @@ async function performCreateOrder(customer, payload, session) {
     address: deliveryAddress,
     slot: { slotId: slot._id, date: slot.date, startsAt: slot.startsAt, endsAt: slot.endsAt },
     couponCode: couponCode || coupon?.code,
+    couponRedemption: paymentIntent?.reservation?.couponRedemption || couponRedemption?._id,
     ...totals,
     paymentMethod: payload.paymentMethod,
     paymentStatus: 'pending',
@@ -301,11 +321,9 @@ async function performCreateOrder(customer, payload, session) {
   const mutation = payload.paymentMethod === 'razorpay'
     ? await consumeReservedInventory(paymentIntent.reservation.items, order._id, customer._id, session)
     : await sellAvailableInventory(items, order._id, customer._id, session);
-  const couponReservationId = payload.paymentMethod === 'razorpay'
-    ? paymentIntent.reservation?.coupon
-    : coupon?._id;
-  if (couponReservationId) {
-    const consumedCoupon = await consumeCouponReservation(couponReservationId, session);
+  const couponRedemptionId = paymentIntent?.reservation?.couponRedemption || couponRedemption?._id;
+  if (couponRedemptionId) {
+    const consumedCoupon = await consumeCouponReservation(couponRedemptionId, order._id, session);
     if (!consumedCoupon) {
       throw new AppError('Coupon reservation could not be consumed', 409, 'COUPON_RESERVATION_MISMATCH');
     }
@@ -439,17 +457,8 @@ export async function cancelOrder(id, payload, actor) {
         const restored = await restoreOrderInventory(order.items, order._id, actor._id, session);
         changes = inventoryChanges(restored.products, 'stock.restored');
         await releaseSlot(order.slot?.slotId, session);
-        if (order.couponCode) {
-          const couponQuery = Coupon.findOne({ code: order.couponCode });
-          couponQuery.session(session);
-          const coupon = await couponQuery;
-          if (coupon) {
-            const restoredCoupon = await restoreConsumedCoupon(coupon._id, session);
-            if (!restoredCoupon) {
-              throw new AppError('Consumed coupon could not be restored', 409, 'COUPON_USAGE_MISMATCH');
-            }
-          }
-        }
+        // Coupon eligibility is intentionally permanent after order creation.
+        // Cancellation/refund restores inventory and the delivery slot only.
         order.inventoryRestoredAt = new Date();
       }
       order.status = 'cancelled';

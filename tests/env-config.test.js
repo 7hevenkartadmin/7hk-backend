@@ -29,6 +29,14 @@ const productionRequirements = {
   CLOUDINARY_CLOUD_NAME: 'synthetic-cloud',
   CLOUDINARY_API_KEY: 'synthetic-cloud-key',
   CLOUDINARY_API_SECRET: 'synthetic-cloud-secret',
+  ADMIN_APP_URL: 'https://admin.example.com',
+  OWNER_TOTP_ENCRYPTION_KEY: 'ab'.repeat(32),
+  SMTP_HOST: 'smtp.example.com',
+  SMTP_PORT: '587',
+  SMTP_SECURE: 'false',
+  SMTP_USER: 'security@example.com',
+  SMTP_PASS: 'synthetic-smtp-password',
+  SMTP_FROM: 'security@example.com',
 };
 
 function environmentFor(NODE_ENV, overrides = {}) {
@@ -122,6 +130,7 @@ test('parser returns normalized derived values without reading process environme
   });
   assert.equal(parsed.OTP_HMAC_SECRET, base.JWT_REFRESH_SECRET);
   assert.deepEqual(parsed.CORS_ORIGINS, ['https://store.example', 'https://admin.example']);
+  assert.equal(parsed.REFRESH_TOKEN_TTL, '30d');
 });
 
 test('invalid booleans and providers use value-free parser issues', () => {

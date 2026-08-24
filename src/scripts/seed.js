@@ -4,6 +4,7 @@ import { User } from '../modules/users/user.model.js';
 import { Category } from '../modules/catalog/category.model.js';
 import { Product } from '../modules/catalog/product.model.js';
 import { Coupon } from '../modules/coupons/coupon.model.js';
+import { CouponRedemption } from '../modules/coupons/couponRedemption.model.js';
 import { DeliverySlot } from '../modules/delivery/deliverySlot.model.js';
 import { Order } from '../modules/orders/order.model.js';
 import { Payment } from '../modules/payments/payment.model.js';
@@ -72,6 +73,7 @@ await Promise.all([
   Order.deleteMany({}),
   Category.deleteMany({}),
   Product.deleteMany({}),
+  CouponRedemption.deleteMany({}),
   Coupon.deleteMany({}),
   DeliverySlot.deleteMany({}),
 ]);
@@ -108,6 +110,8 @@ if (process.env.NODE_ENV !== 'production') {
       phone: '+919999999999',
       role: 'admin',
       status: 'active',
+      staffSeat: 'PRIMARY_ADMIN',
+      assignmentExpiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
       passwordHash: adminPasswordHash,
     },
     { upsert: true, new: true },

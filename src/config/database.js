@@ -2,6 +2,24 @@ import mongoose from 'mongoose';
 import { env } from './env.js';
 
 const REQUIRED_PRODUCTION_INDEXES = [
+  ['users', { phone: 1 }, {
+    name: 'user_phone_unique_when_present',
+    partialFilterExpression: { phone: { $type: 'string' } },
+  }],
+  ['users', { staffSeat: 1 }, {
+    name: 'user_staff_seat_unique',
+    sparse: true,
+  }],
+  ['adminactiontokens', { tokenHash: 1 }, { name: 'admin_action_token_hash_unique' }],
+  ['adminactiontokens', { activeTokenKey: 1 }, {
+    name: 'admin_action_token_active_unique',
+    sparse: true,
+  }],
+  ['adminactiontokens', { expiresAt: 1 }, {
+    name: 'admin_action_token_expiry',
+    unique: false,
+    expireAfterSeconds: 0,
+  }],
   ['paymentintents', { user: 1, idempotencyKey: 1 }, {
     name: 'payment_intent_user_idempotency_unique',
     partialFilterExpression: { idempotencyKey: { $type: 'string' } },
@@ -20,6 +38,10 @@ const REQUIRED_PRODUCTION_INDEXES = [
   }],
   ['paymentintents', { 'reservation.state': 1, 'reservation.expiresAt': 1 }, {
     name: 'payment_intent_reservation_expiry',
+    unique: false,
+  }],
+  ['paymentintents', { user: 1, status: 1, 'reservation.state': 1 }, {
+    name: 'payment_intent_user_active_sessions',
     unique: false,
   }],
   ['payments', { providerOrderId: 1 }, {
@@ -41,9 +63,26 @@ const REQUIRED_PRODUCTION_INDEXES = [
   ['products', { sku: 1 }, { name: 'product_sku_unique' }],
   ['products', { 'variants.sku': 1 }, { name: 'product_variant_sku_unique', sparse: true }],
   ['coupons', { code: 1 }, { name: 'coupon_code_unique' }],
+  ['couponredemptions', { coupon: 1, user: 1 }, {
+    name: 'coupon_redemption_active_user_unique',
+    partialFilterExpression: { active: true },
+  }],
+  ['couponredemptions', { paymentIntent: 1 }, {
+    name: 'coupon_redemption_payment_intent_unique',
+    partialFilterExpression: { paymentIntent: { $type: 'objectId' } },
+  }],
+  ['couponredemptions', { order: 1 }, {
+    name: 'coupon_redemption_order_unique',
+    partialFilterExpression: { order: { $type: 'objectId' } },
+  }],
   ['deliveryslots', { date: 1, startsAt: 1, serviceArea: 1 }, { name: 'delivery_slot_unique' }],
   ['logincompletions', { proofDigest: 1 }, { name: 'login_completion_proof_digest_unique' }],
 ];
+
+const USER_PHONE_INDEX_NAME = 'user_phone_unique_when_present';
+const LEGACY_USER_PHONE_INDEX_NAME = 'phone_1';
+const USER_PHONE_INDEX_KEY = { phone: 1 };
+const USER_PHONE_PARTIAL_FILTER = { phone: { $type: 'string' } };
 
 function hasSameKey(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
@@ -55,6 +94,33 @@ async function listIndexes(collection) {
   } catch (error) {
     if (error?.code === 26 || error?.codeName === 'NamespaceNotFound') return [];
     throw error;
+  }
+}
+
+export async function ensureUserPhoneIndex(database) {
+  const collection = database.collection('users');
+  const indexes = await listIndexes(collection);
+  const target = indexes.find((index) => index.name === USER_PHONE_INDEX_NAME);
+
+  if (target) {
+    if (!hasSameKey(target.key, USER_PHONE_INDEX_KEY)
+      || target.unique !== true
+      || !hasSameKey(target.partialFilterExpression, USER_PHONE_PARTIAL_FILTER)) {
+      throw new Error(`User phone index options mismatch: ${USER_PHONE_INDEX_NAME}`);
+    }
+  } else {
+    // Build the replacement while the legacy unique index still protects all
+    // existing customer phone values. If creation fails, the legacy index is
+    // deliberately left untouched.
+    await collection.createIndex(USER_PHONE_INDEX_KEY, {
+      name: USER_PHONE_INDEX_NAME,
+      unique: true,
+      partialFilterExpression: USER_PHONE_PARTIAL_FILTER,
+    });
+  }
+
+  if (indexes.some((index) => index.name === LEGACY_USER_PHONE_INDEX_NAME)) {
+    await collection.dropIndex(LEGACY_USER_PHONE_INDEX_NAME);
   }
 }
 
@@ -100,14 +166,17 @@ export async function assertDatabaseTransactionSupport(database = mongoose.conne
 export async function connectDatabase() {
   mongoose.set('strictQuery', true);
   await mongoose.connect(env.MONGODB_URI, {
-    autoIndex: env.NODE_ENV !== 'production',
+    autoIndex: false,
     serverSelectionTimeoutMS: 8000,
   });
 
-  // Development models already build their declared indexes. Production keeps
-  // autoIndex disabled and creates only integrity indexes relied on at runtime.
+  await ensureUserPhoneIndex(mongoose.connection.db);
+  // Create only the integrity indexes the application relies on, matching by
+  // key definition rather than index name. This preserves compatible legacy
+  // names such as eventId_1 and avoids broad development index rebuilds.
+  await ensureProductionIndexes(mongoose.connection.db);
+
   if (env.NODE_ENV === 'production') {
-    await ensureProductionIndexes(mongoose.connection.db);
     await assertDatabaseTransactionSupport(mongoose.connection.db);
   }
   console.log('Connected to MongoDB');

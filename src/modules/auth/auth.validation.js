@@ -16,7 +16,8 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   identifier: z.string().min(3),
   password: z.string().min(1),
-});
+  totp: z.string().regex(/^\d{6}$/).optional(),
+}).strict();
 
 export const refreshSchema = z.object({}).strict();
 

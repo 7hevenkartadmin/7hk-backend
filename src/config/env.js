@@ -27,6 +27,14 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL: z.string().default('30d'),
   CORS_ORIGINS: z.string().default('http://localhost:5173,http://admin.localhost:5173'),
   COOKIE_SECURE: strictEnvironmentBoolean(false),
+  ADMIN_APP_URL: z.string().url().default('http://localhost:5174'),
+  OWNER_TOTP_ENCRYPTION_KEY: z.union([z.string().regex(/^[a-fA-F0-9]{64}$/), z.literal('')]).default(''),
+  SMTP_HOST: z.string().trim().optional().default(''),
+  SMTP_PORT: z.coerce.number().int().positive().max(65535).default(587),
+  SMTP_SECURE: strictEnvironmentBoolean(false),
+  SMTP_USER: z.string().trim().optional().default(''),
+  SMTP_PASS: z.string().optional().default(''),
+  SMTP_FROM: z.union([z.string().email(), z.literal('')]).default(''),
   RAZORPAY_KEY_ID: z.string().optional().default(''),
   RAZORPAY_KEY_SECRET: z.string().optional().default(''),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional().default(''),
@@ -77,6 +85,20 @@ const envSchema = z.object({
     if (data.JWT_ACCESS_SECRET === data.JWT_REFRESH_SECRET) {
       issue('JWT_REFRESH_SECRET', 'must differ from JWT_ACCESS_SECRET');
     }
+    if (!data.OWNER_TOTP_ENCRYPTION_KEY) {
+      issue('OWNER_TOTP_ENCRYPTION_KEY', 'requires a random 32-byte hexadecimal key in production');
+    }
+    if (!data.ADMIN_APP_URL.startsWith('https://')) {
+      issue('ADMIN_APP_URL', 'must use HTTPS in production');
+    }
+    [
+      ['SMTP_HOST', data.SMTP_HOST],
+      ['SMTP_USER', data.SMTP_USER],
+      ['SMTP_PASS', data.SMTP_PASS],
+      ['SMTP_FROM', data.SMTP_FROM],
+    ].forEach(([field, value]) => {
+      if (!value || isPlaceholder(value)) issue(field, 'is required for production admin security emails');
+    });
     [
       ['RAZORPAY_KEY_ID', data.RAZORPAY_KEY_ID, 8],
       ['RAZORPAY_KEY_SECRET', data.RAZORPAY_KEY_SECRET, 16],

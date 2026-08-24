@@ -2,20 +2,61 @@ import { User } from '../users/user.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { verifyAccessToken } from './token.service.js';
+import {
+  accessCookieName,
+  AUTH_CONTEXT_HEADER,
+  normalizeAuthContext,
+} from './auth.cookies.js';
+
+export function accessTokenForRequest(req) {
+  const header = req.headers.authorization || '';
+  if (header.startsWith('Bearer ')) return { token: header.slice(7), context: 'bearer' };
+
+  const requestedContext = normalizeAuthContext(req.headers[AUTH_CONTEXT_HEADER]);
+  if (requestedContext) {
+    return {
+      token: req.cookies?.[accessCookieName(requestedContext)],
+      context: requestedContext,
+    };
+  }
+
+  // Preserve compatibility for non-browser/mobile callers and one-app browser
+  // sessions. Browser clients that can hold both sessions send X-Auth-Context.
+  if (req.cookies?.accessToken) return { token: req.cookies.accessToken, context: 'legacy' };
+  const available = ['customer', 'admin', 'owner']
+    .map((context) => ({ context, token: req.cookies?.[accessCookieName(context)] }))
+    .filter(({ token }) => Boolean(token));
+  if (available.length === 1) return available[0];
+  return { token: null, context: null };
+}
+
+export function roleMatchesAuthContext(role, context) {
+  if (context === 'customer') return role === 'customer';
+  if (context === 'admin') return ['admin', 'manager', 'support'].includes(role);
+  if (context === 'owner') return role === 'owner';
+  return true;
+}
+
+export function userSessionIsCurrent(user, payload, context, now = new Date()) {
+  return Boolean(user
+    && user.status === 'active'
+    && payload.tokenVersion === Number(user.tokenVersion || 0)
+    && !(user.role === 'admin' && (user.staffSeat !== 'PRIMARY_ADMIN' || !user.assignmentExpiresAt || user.assignmentExpiresAt <= now))
+    && !(user.role === 'owner' && user.staffSeat !== 'PRIMARY_OWNER')
+    && roleMatchesAuthContext(user.role, context));
+}
 
 export const requireAuth = asyncHandler(async (req, _res, next) => {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : req.cookies?.accessToken;
+  const { token, context } = accessTokenForRequest(req);
   if (!token) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
 
   const payload = verifyAccessToken(token);
   const user = await User.findById(payload.sub);
-  if (!user
-    || user.status !== 'active'
-    || payload.tokenVersion !== Number(user.tokenVersion || 0)) {
+  if (!userSessionIsCurrent(user, payload, context)) {
     throw new AppError('Invalid session', 401, 'INVALID_SESSION');
   }
   req.user = user;
+  req.authContext = context;
   next();
 });
 

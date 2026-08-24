@@ -13,10 +13,13 @@ import { realtimeRoutes } from './modules/realtime/realtime.routes.js';
 import { settingsRoutes } from './modules/settings/settings.routes.js';
 import { whatsappWebhookRoutes } from './modules/auth/whatsapp.webhook.js';
 import { razorpayWebhookRoutes } from './modules/payments/razorpay.webhook.js';
+import { adminSecurityRoutes, ownerRoutes } from './modules/owner/owner.routes.js';
 
 export const routes = Router();
 
 routes.use('/auth', authRoutes);
+routes.use('/auth/admin', adminSecurityRoutes);
+routes.use('/owner', ownerRoutes);
 routes.use('/users', userRoutes);
 routes.use('/catalog', catalogRoutes);
 routes.use('/orders', orderRoutes);

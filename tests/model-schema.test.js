@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import mongoose from "mongoose";
 import { Product } from "../src/modules/catalog/product.model.js";
 import { Coupon } from "../src/modules/coupons/coupon.model.js";
+import { CouponRedemption } from "../src/modules/coupons/couponRedemption.model.js";
 import { Order } from "../src/modules/orders/order.model.js";
 import { Payment } from "../src/modules/payments/payment.model.js";
 import { User } from "../src/modules/users/user.model.js";
@@ -178,12 +179,21 @@ test("user phone validation is required for customers but does not block staff e
   assert.equal(adminWithoutPhone.validateSync(), undefined);
 });
 
+test("user phone uniqueness ignores accounts that do not have a phone", () => {
+  const phoneIndex = User.schema.indexes().find(([fields]) => fields.phone === 1);
+
+  assert.ok(phoneIndex);
+  assert.equal(phoneIndex[1].name, "user_phone_unique_when_present");
+  assert.equal(phoneIndex[1].unique, true);
+  assert.deepEqual(phoneIndex[1].partialFilterExpression, { phone: { $type: "string" } });
+});
+
 test("user model rejects unsupported roles, statuses, and embedded address objects", () => {
   const user = new User({
     name: "Customer",
     phone: "9999999999",
     passwordHash: "hashed-password",
-    role: "owner",
+    role: "superadmin",
     status: "disabled",
     addresses: [
       {
@@ -297,6 +307,7 @@ test("product model recomputes active variant stock aggregates and default mirro
 test("coupon and payment refund ledgers apply safe legacy defaults", () => {
   const coupon = new Coupon({
     code: "SAFE10",
+    image: "https://cdn.example.com/coupons/safe10.jpg",
     type: "flat",
     value: 10,
     startsAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -315,4 +326,33 @@ test("coupon and payment refund ledgers apply safe legacy defaults", () => {
   assert.equal(payment.amountRefunded, 0);
   assert.deepEqual(payment.processedRefundIds, []);
   assert.equal(payment.refundReason, "ORDER_CANCELLED");
+});
+
+test("coupon redemption ledger enforces permanent active identity and lifecycle fields", () => {
+  const consumed = new CouponRedemption({
+    coupon: objectId(),
+    user: objectId(),
+    codeSnapshot: "ONCE50",
+    status: "consumed",
+    active: true,
+    order: objectId(),
+    consumedAt: new Date(),
+  });
+  const invalidReleased = new CouponRedemption({
+    coupon: objectId(),
+    user: objectId(),
+    codeSnapshot: "ONCE50",
+    status: "released",
+    active: true,
+    releasedAt: new Date(),
+  });
+
+  assert.equal(consumed.validateSync(), undefined);
+  assert.ok(invalidReleased.validateSync()?.errors?.active);
+  const activeIdentityIndex = CouponRedemption.schema.indexes().find(
+    ([, options]) => options.name === "coupon_redemption_active_user_unique",
+  );
+  assert.deepEqual(activeIdentityIndex?.[0], { coupon: 1, user: 1 });
+  assert.equal(activeIdentityIndex?.[1].unique, true);
+  assert.deepEqual(activeIdentityIndex?.[1].partialFilterExpression, { active: true });
 });

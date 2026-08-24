@@ -3,6 +3,7 @@ import { getPagination, paged } from '../../shared/utils/pagination.js';
 import { parseStoreDate, storeDateKey, todayStoreRange } from '../../shared/utils/storeDate.js';
 import { Product } from '../catalog/product.model.js';
 import { Order } from '../orders/order.model.js';
+import { PaymentIntent } from '../payments/paymentIntent.model.js';
 
 export const REVENUE_FILTER = {
   status: { $ne: 'cancelled' },
@@ -134,6 +135,7 @@ export async function getDashboardStats(period = 'weekly') {
     totalRevenueRows, todayRevenueRows, totalProducts, activeProducts,
     inventoryRows, recentOrders, revenueRows, periodSummaryRows,
     categoryRows, topProductRows, hourlyRows,
+    refundPendingCount, refundFailedCount, recentPaymentExceptions,
   ] = await Promise.all([
     Order.countDocuments(),
     Order.countDocuments({ createdAt: { $gte: today.start, $lt: today.end } }),
@@ -155,6 +157,14 @@ export async function getDashboardStats(period = 'weekly') {
     Order.aggregate([{ $match: periodRevenueFilter }, { $unwind: '$items' }, { $group: { _id: { $ifNull: ['$items.category', 'Other'] }, value: { $sum: '$items.quantity' } } }, { $sort: { value: -1 } }, { $limit: 6 }]),
     Order.aggregate([{ $match: periodRevenueFilter }, { $unwind: '$items' }, { $group: { _id: '$items.name', sales: { $sum: '$items.quantity' } } }, { $sort: { sales: -1 } }, { $limit: 8 }]),
     Order.aggregate([{ $match: periodRevenueFilter }, { $group: { _id: { $dateToString: { format: '%H', date: '$createdAt', timezone: 'Asia/Kolkata' } }, orders: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
+    PaymentIntent.countDocuments({ status: 'refund_pending' }),
+    PaymentIntent.countDocuments({ status: 'refund_failed' }),
+    PaymentIntent.find({ status: { $in: ['refund_pending', 'refund_failed'] } })
+      .select('_id user status amount currency failureCode refundReason refundStatus refundAttemptCount nextRefundAttemptAt updatedAt')
+      .populate('user', 'name phone email')
+      .sort({ updatedAt: -1 })
+      .limit(5)
+      .lean(),
   ]);
 
   const inventory = inventoryRows[0] || {};
@@ -182,6 +192,12 @@ export async function getDashboardStats(period = 'weekly') {
     recentOrders,
     outOfStockItems,
     lowStockItems,
+    paymentOperations: {
+      attention: refundPendingCount + refundFailedCount,
+      refundPending: refundPendingCount,
+      refundFailed: refundFailedCount,
+      recentExceptions: recentPaymentExceptions,
+    },
     analytics: {
       orders: periodSummaryRows[0]?.orders || 0,
       revenue: periodSummaryRows[0]?.revenue || 0,

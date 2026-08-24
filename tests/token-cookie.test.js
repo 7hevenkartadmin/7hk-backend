@@ -10,6 +10,7 @@ import {
   signRefreshToken,
   tokenLifetimeMs,
 } from '../src/modules/auth/token.service.js';
+import { accessTokenForRequest, roleMatchesAuthContext } from '../src/modules/auth/auth.middleware.js';
 
 const SEED = 20260635;
 const signingKey = 'x'.repeat(32);
@@ -87,7 +88,7 @@ test('shared session cookie attachment serializes remaining validity and securit
 
   assert.equal(response.values.length, 2);
   const [accessCookie, refreshCookie] = response.values;
-  assert.match(accessCookie, /^accessToken=/);
+  assert.match(accessCookie, /^customerAccessToken=/);
   assert.match(refreshCookie, /^customerRefreshToken=/);
   assert.equal(Number(attribute(accessCookie, 'Max-Age')), accessSeconds - 120);
   assert.equal(Number(attribute(refreshCookie, 'Max-Age')), refreshSeconds - 120);
@@ -100,7 +101,7 @@ test('shared session cookie attachment serializes remaining validity and securit
   }
 });
 
-test('admin and customer sessions use separate refresh cookies', () => {
+test('owner, admin, and customer sessions use separate access and refresh cookies', () => {
   const issuedAt = Math.floor(Date.now() / 1000);
   const currentTimeMs = issuedAt * 1000;
   const tokens = {
@@ -109,12 +110,58 @@ test('admin and customer sessions use separate refresh cookies', () => {
   };
   const customerResponse = cookieResponse();
   const adminResponse = cookieResponse();
+  const ownerResponse = cookieResponse();
 
   attachCookies(customerResponse, tokens, currentTimeMs, 'customer');
   attachCookies(adminResponse, tokens, currentTimeMs, 'admin');
+  attachCookies(ownerResponse, tokens, currentTimeMs, 'owner');
 
+  assert.match(customerResponse.values[0], /^customerAccessToken=/);
   assert.match(customerResponse.values[1], /^customerRefreshToken=/);
+  assert.match(adminResponse.values[0], /^adminAccessToken=/);
   assert.match(adminResponse.values[1], /^adminRefreshToken=/);
+  assert.match(ownerResponse.values[0], /^ownerAccessToken=/);
+  assert.match(ownerResponse.values[1], /^ownerRefreshToken=/);
+});
+
+test('auth context selects the correct access cookie when both applications are logged in', () => {
+  const cookies = {
+    customerAccessToken: 'customer-token',
+    adminAccessToken: 'admin-token',
+    ownerAccessToken: 'owner-token',
+  };
+
+  assert.deepEqual(accessTokenForRequest({
+    headers: { 'x-auth-context': 'customer' },
+    cookies,
+  }), { token: 'customer-token', context: 'customer' });
+  assert.deepEqual(accessTokenForRequest({
+    headers: { 'x-auth-context': 'admin' },
+    cookies,
+  }), { token: 'admin-token', context: 'admin' });
+  assert.deepEqual(accessTokenForRequest({
+    headers: { 'x-auth-context': 'owner' },
+    cookies,
+  }), { token: 'owner-token', context: 'owner' });
+});
+
+test('bearer authentication remains independent of browser cookie contexts', () => {
+  assert.deepEqual(accessTokenForRequest({
+    headers: { authorization: 'Bearer android-access-token', 'x-auth-context': 'customer' },
+    cookies: { customerAccessToken: 'browser-token', adminAccessToken: 'admin-token' },
+  }), { token: 'android-access-token', context: 'bearer' });
+});
+
+test('browser auth contexts reject tokens from the other application role family', () => {
+  assert.equal(roleMatchesAuthContext('customer', 'customer'), true);
+  assert.equal(roleMatchesAuthContext('admin', 'customer'), false);
+  assert.equal(roleMatchesAuthContext('owner', 'admin'), false);
+  assert.equal(roleMatchesAuthContext('owner', 'owner'), true);
+  assert.equal(roleMatchesAuthContext('admin', 'owner'), false);
+  assert.equal(roleMatchesAuthContext('manager', 'admin'), true);
+  assert.equal(roleMatchesAuthContext('support', 'admin'), true);
+  assert.equal(roleMatchesAuthContext('customer', 'admin'), false);
+  assert.equal(roleMatchesAuthContext('customer', 'bearer'), true);
 });
 
 test('delayed deterministic replay keeps cookie expiry aligned to JWT exp under a controlled clock', () => {

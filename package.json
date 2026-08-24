@@ -1,4 +1,4 @@
- {
+{
   "name": "7heaven-backend",
   "version": "1.0.0",
   "description": "Industry-grade modular monolith API for the 7Heven grocery platform.",
@@ -6,10 +6,15 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",
+    "dev:ensure-admin": "node src/scripts/ensure-dev-admin.js",
     "start": "node src/server.js",
     "migrate:inventory": "node src/scripts/migrate-inventory.js",
     "migrate:addresses": "node src/scripts/migrate-addresses.js",
     "migrate:products": "node src/scripts/normalize-products.js",
+    "migrate:coupon-redemptions": "node src/scripts/migrate-coupon-redemptions.js",
+    "migrate:admin-access": "node src/scripts/migrate-admin-access.js",
+    "owner:create": "node src/scripts/create-owner.js",
+    "owner:reset-password": "node src/scripts/reset-owner-password.js",
     "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",
     "test:backend": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",
     "test:api": "node --import ./tests/setup-env.js --test tests/api.integration.test.js",
@@ -38,6 +43,7 @@
     "morgan": "^1.10.0",
     "multer": "^2.2.0",
     "nanoid": "^5.0.7",
+    "nodemailer": "^9.0.5",
     "pdfkit": "^0.19.1",
     "razorpay": "^2.9.4",
     "slugify": "^1.6.6",

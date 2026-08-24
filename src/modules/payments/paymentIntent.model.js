@@ -14,6 +14,7 @@ const reservationSchema = new mongoose.Schema({
   expiresAt: { type: Date, required: true },
   slot: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliverySlot', required: true },
   coupon: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon' },
+  couponRedemption: { type: mongoose.Schema.Types.ObjectId, ref: 'CouponRedemption' },
   releasedAt: Date,
   consumedAt: Date,
   releaseReason: String,
@@ -73,6 +74,10 @@ paymentIntentSchema.index(
 paymentIntentSchema.index(
   { 'reservation.state': 1, 'reservation.expiresAt': 1 },
   { name: 'payment_intent_reservation_expiry' },
+);
+paymentIntentSchema.index(
+  { user: 1, status: 1, 'reservation.state': 1 },
+  { name: 'payment_intent_user_active_sessions' },
 );
 paymentIntentSchema.index(
   { status: 1, nextRefundAttemptAt: 1, 'reservation.state': 1 },

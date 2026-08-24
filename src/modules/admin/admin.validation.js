@@ -29,7 +29,7 @@ export const auditLogsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
   action: z.string().trim().max(80).optional(),
   entityType: z.string().trim().max(80).optional(),
-  actorRole: z.enum(['admin', 'manager', 'support']).optional(),
+  actorRole: z.enum(['owner', 'admin', 'manager', 'support']).optional(),
   from: dateString.optional(),
   to: dateString.optional(),
   search: z.string().trim().max(80).optional(),

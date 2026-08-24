@@ -9,7 +9,6 @@ const userSchema = new mongoose.Schema({
   phone: {
     type: String,
     trim: true,
-    unique: true,
     required: [function phoneRequiredForCustomer() { return this.role === 'customer'; }, 'Phone number is required for customers'],
     validate: {
       validator(value) {
@@ -19,13 +18,27 @@ const userSchema = new mongoose.Schema({
     },
   },
   passwordHash: { type: String, required: true, select: false },
-  role: { type: String, enum: ['customer', 'admin', 'manager', 'support'], default: 'customer', index: true },
-  status: { type: String, enum: ['active', 'blocked'], default: 'active' },
+  role: { type: String, enum: ['customer', 'owner', 'admin', 'manager', 'support'], default: 'customer', index: true },
+  status: { type: String, enum: ['invited', 'active', 'blocked', 'revoked'], default: 'active' },
+  staffSeat: { type: String, enum: ['PRIMARY_OWNER', 'PRIMARY_ADMIN'] },
+  assignmentExpiresAt: Date,
+  revokedAt: Date,
+  revokedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  passwordChangedAt: Date,
+  totpSecretEncrypted: { type: String, select: false },
+  totpEnabled: { type: Boolean, default: false },
   addresses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Address' }],
   refreshTokenHash: { type: String, select: false },
   tokenVersion: { type: Number, default: 0, min: 0 },
   lastLoginAt: Date,
 }, { timestamps: true });
+
+userSchema.index({ phone: 1 }, {
+  unique: true,
+  name: 'user_phone_unique_when_present',
+  partialFilterExpression: { phone: { $type: 'string' } },
+});
+userSchema.index({ staffSeat: 1 }, { unique: true, sparse: true, name: 'user_staff_seat_unique' });
 
 userSchema.methods.comparePassword = function comparePassword(password) {
   return bcrypt.compare(password, this.passwordHash);

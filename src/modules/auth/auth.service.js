@@ -14,6 +14,7 @@ import { buildLoginOtpPayload, getSevenHeavenOtpService } from './otp.module.js'
 import { OTP_CODE_PATTERN } from './otp.constants.js';
 import { normalizeIndianMobile } from './phone.js';
 import { digestLoginProof, LoginCompletion } from './login-completion.model.js';
+import { decryptTotpSecret, verifyTotpCode } from './totp.service.js';
 
 function publicUser(user) {
   return {
@@ -22,6 +23,7 @@ function publicUser(user) {
     email: user.email,
     phone: user.phone,
     role: user.role,
+    assignmentExpiresAt: user.assignmentExpiresAt,
   };
 }
 
@@ -155,11 +157,30 @@ export async function registerCustomer(payload) {
 export async function login(payload) {
   const user = await User.findOne({
     $or: [{ phone: payload.identifier }, { email: payload.identifier.toLowerCase() }],
-  }).select('+passwordHash +refreshTokenHash');
+  }).select('+passwordHash +refreshTokenHash +totpSecretEncrypted');
   if (!user || !(await user.comparePassword(payload.password))) {
     throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
   }
   if (user.status !== 'active') throw new AppError('Account is blocked', 403, 'ACCOUNT_BLOCKED');
+  if (user.role === 'admin' && (user.staffSeat !== 'PRIMARY_ADMIN' || !user.assignmentExpiresAt || user.assignmentExpiresAt <= new Date())) {
+    throw new AppError('Administrator assignment is unavailable or expired', 403, 'ADMIN_ASSIGNMENT_EXPIRED');
+  }
+  if (user.role === 'owner') {
+    if (user.staffSeat !== 'PRIMARY_OWNER') {
+      throw new AppError('Owner security account is unavailable', 403, 'OWNER_ACCOUNT_UNAVAILABLE');
+    }
+    if (!user.totpEnabled || !user.totpSecretEncrypted) {
+      throw new AppError('Owner authenticator is not configured', 403, 'OWNER_TOTP_NOT_CONFIGURED');
+    }
+    if (!payload.totp) throw new AppError('Owner authenticator code required', 401, 'TOTP_REQUIRED');
+    let valid = false;
+    try {
+      valid = verifyTotpCode(decryptTotpSecret(user.totpSecretEncrypted), payload.totp);
+    } catch {
+      valid = false;
+    }
+    if (!valid) throw new AppError('Invalid owner authenticator code', 401, 'TOTP_INVALID');
+  }
   const refreshToken = signRefreshToken(user);
   user.refreshTokenHash = hashToken(refreshToken);
   user.lastLoginAt = new Date();
@@ -177,6 +198,12 @@ export async function refreshSession(refreshToken) {
     throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
   }
   if (user.status !== 'active') throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
+  if (user.role === 'admin' && (user.staffSeat !== 'PRIMARY_ADMIN' || !user.assignmentExpiresAt || user.assignmentExpiresAt <= new Date())) {
+    throw new AppError('Administrator assignment is unavailable or expired', 403, 'ADMIN_ASSIGNMENT_EXPIRED');
+  }
+  if (user.role === 'owner' && user.staffSeat !== 'PRIMARY_OWNER') {
+    throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
+  }
   const nextRefreshToken = signRefreshToken(user);
   user.refreshTokenHash = hashToken(nextRefreshToken);
   await user.save();

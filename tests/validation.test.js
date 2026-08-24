@@ -58,6 +58,7 @@ test('out-for-delivery orders can be delivered but cannot be cancelled', () => {
 test('coupon validation enforces positive validity window and defaults', () => {
   const valid = couponSchema.safeParse({
     code: 'FRESH50',
+    image: 'https://cdn.example.com/coupons/fresh50.jpg',
     type: 'flat',
     value: 50,
     startsAt: '2026-06-01',
@@ -67,13 +68,29 @@ test('coupon validation enforces positive validity window and defaults', () => {
   assert.equal(valid.success, true);
   assert.equal(valid.data.maxDiscount, 0);
   assert.equal(valid.data.isActive, true);
+  assert.equal(valid.data.startsAt.toISOString(), '2026-05-31T18:30:00.000Z');
+  assert.equal(valid.data.endsAt.toISOString(), '2026-06-30T18:29:59.999Z');
+
+  assert.equal(couponSchema.safeParse({
+    code: 'NOIMAGE', type: 'flat', value: 10, startsAt: '2026-06-01', endsAt: '2026-06-30',
+  }).success, false);
 
   assert.equal(couponSchema.safeParse({
     code: 'BAD',
+    image: 'https://cdn.example.com/coupons/bad.jpg',
     type: 'flat',
     value: 10,
     startsAt: '2026-06-30',
     endsAt: '2026-06-01',
+  }).success, false);
+  assert.equal(couponSchema.safeParse({
+    code: 'TOO-MUCH', image: 'https://cdn.example.com/coupons/too-much.jpg', type: 'percentage', value: 101, startsAt: '2026-06-01', endsAt: '2026-06-30',
+  }).success, false);
+  assert.equal(couponSchema.safeParse({
+    code: 'ZERO', image: 'https://cdn.example.com/coupons/zero.jpg', type: 'flat', value: 0, startsAt: '2026-06-01', endsAt: '2026-06-30',
+  }).success, false);
+  assert.equal(couponSchema.safeParse({
+    code: 'STRICT', image: 'https://cdn.example.com/coupons/strict.jpg', type: 'flat', value: 10, startsAt: '2026-06-01', endsAt: '2026-06-30', unexpected: true,
   }).success, false);
 });
 
@@ -90,6 +107,10 @@ test('delivery slot validation rejects malformed windows and capacity', () => {
     startsAt: '12:00',
     endsAt: '10:00',
     capacity: 50,
+  }).success, false);
+
+  assert.equal(deliverySlotSchema.safeParse({
+    date: '2026-02-30', startsAt: '10:00', endsAt: '12:00', capacity: 50,
   }).success, false);
 
   assert.equal(deliverySlotSchema.safeParse({

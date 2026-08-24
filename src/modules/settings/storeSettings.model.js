@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
 
 const bannerSchema = new mongoose.Schema({
-  title: { type: String, trim: true, required: true },
+  title: { type: String, trim: true, default: '' },
   highlight: { type: String, trim: true, default: '' },
   copy: { type: String, trim: true, default: '' },
   tag: { type: String, trim: true, default: '' },
-  image: { type: String, trim: true, default: '' },
+  image: { type: String, trim: true, required: true },
   ctaLabel: { type: String, trim: true, default: 'Shop Now' },
   ctaHref: { type: String, trim: true, default: '#products' },
   isActive: { type: Boolean, default: true },

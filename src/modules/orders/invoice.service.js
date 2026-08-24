@@ -1,8 +1,9 @@
 import PDFDocument from "pdfkit";
+import { formatStoreDate } from '../../shared/utils/storeDate.js';
 
 export function buildInvoice(order) {
   const issuedAt = new Date();
-  const number = `INV-${issuedAt.getFullYear()}-${order.orderNumber}`;
+  const number = `INV-${formatStoreDate(issuedAt, { year: 'numeric' })}-${order.orderNumber}`;
   return {
     number,
     issuedAt,
@@ -39,7 +40,7 @@ export function streamInvoicePdf(order, response) {
   document.text(`Invoice: ${invoice.number}`);
   document.text(`Order: ${order.orderNumber}`);
   document.text(
-    `Issued: ${new Date(invoice.issuedAt || order.createdAt).toLocaleString("en-IN")}`,
+    `Issued: ${formatStoreDate(invoice.issuedAt || order.createdAt, { dateStyle: 'medium', timeStyle: 'short' })}`,
   );
   document.moveDown().fontSize(12).text("Bill to", { underline: true });
   document

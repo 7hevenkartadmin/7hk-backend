@@ -120,7 +120,7 @@ test('paid order consumption decrements stock and its reservation and writes an 
 
   await withStubs([
     { object: Product, method: 'find', implementation: () => queryReturning([product], []) },
-    { object: InventoryMovement, method: 'create', implementation: async (rows, options) => { movementRows = rows; assert.equal(options.session, 'session'); return rows; } },
+    { object: InventoryMovement, method: 'insertMany', implementation: async (rows, options) => { movementRows = rows; assert.equal(options.session, 'session'); return rows; } },
   ], async () => {
     await consumeReservedInventory(
       [{ product: product._id, variantId: variant._id, quantity: 3 }],
@@ -441,7 +441,7 @@ test('late capture webhook uses monotonic Payment and Order filters', async () =
   assert.deepEqual(orderFilter.status, { $ne: 'cancelled' });
 });
 
-test('order cancellation restores and durably queues once across repeated calls', async () => {
+test('order cancellation restores fulfilment resources but keeps coupon eligibility permanently consumed', async () => {
   const { DeliverySlot } = await import('../src/modules/delivery/deliverySlot.model.js');
   const { cancelOrder } = await import('../src/modules/orders/order.service.js');
   const { Order } = await import('../src/modules/orders/order.model.js');
@@ -472,6 +472,7 @@ test('order cancellation restores and durably queues once across repeated calls'
     paymentMethod: 'razorpay',
     paymentStatus: 'paid',
     paymentIntent: intentId,
+    couponCode: 'ONCEONLY',
     total: 100,
     async save() { return this; },
   };

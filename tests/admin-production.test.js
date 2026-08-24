@@ -5,6 +5,7 @@ import { buildAdminOrderFilter, buildInventoryDashboardPipeline, getDashboardSta
 import { Product } from '../src/modules/catalog/product.model.js';
 import { listProducts } from '../src/modules/catalog/catalog.service.js';
 import { Order } from '../src/modules/orders/order.model.js';
+import { PaymentIntent } from '../src/modules/payments/paymentIntent.model.js';
 import { parseStoreDate } from '../src/shared/utils/storeDate.js';
 
 function withStubs(stubs, callback) {
@@ -115,12 +116,22 @@ test('dashboard statistics count active variants and return separate inventory c
     limit(value) { recentLimit = value; return this; },
     lean() { return Promise.resolve(Array.from({ length: 5 }, (_, index) => ({ orderNumber: `ORD-${index}` }))); },
   };
+  const paymentExceptionQuery = {
+    select() { return this; },
+    populate() { return this; },
+    sort() { return this; },
+    limit(value) { assert.equal(value, 5); return this; },
+    lean() { return Promise.resolve([{ _id: 'intent-1', status: 'refund_failed' }]); },
+  };
+  let paymentCountIndex = 0;
   await withStubs([
     { object: Order, method: 'countDocuments', implementation: async () => orderCounts[orderCountIndex++] },
     { object: Product, method: 'countDocuments', implementation: async () => productCounts[productCountIndex++] },
     { object: Order, method: 'aggregate', implementation: async () => aggregates[aggregateIndex++] },
     { object: Product, method: 'aggregate', implementation: async (pipeline) => { assert.deepEqual(pipeline, buildInventoryDashboardPipeline()); return inventoryResult; } },
     { object: Order, method: 'find', implementation: () => recentQuery },
+    { object: PaymentIntent, method: 'countDocuments', implementation: async () => [2, 1][paymentCountIndex++] },
+    { object: PaymentIntent, method: 'find', implementation: () => paymentExceptionQuery },
   ], async () => {
     const stats = await getDashboardStats('weekly');
     assert.deepEqual(stats.orders, { total: 1248, today: 18, pending: 7, delivered: 1180, cancelled: 61 });
@@ -139,6 +150,12 @@ test('dashboard statistics count active variants and return separate inventory c
     assert.equal(stats.recentOrders.length, 5);
     assert.equal(recentLimit, 5);
     assert.equal(stats.analytics.averageOrderValue, 692);
+    assert.deepEqual(stats.paymentOperations, {
+      attention: 3,
+      refundPending: 2,
+      refundFailed: 1,
+      recentExceptions: [{ _id: 'intent-1', status: 'refund_failed' }],
+    });
   });
 });
 

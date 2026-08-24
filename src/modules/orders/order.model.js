@@ -45,6 +45,7 @@ const orderSchema = new mongoose.Schema({
     endsAt: String,
   },
   couponCode: String,
+  couponRedemption: { type: mongoose.Schema.Types.ObjectId, ref: 'CouponRedemption', index: true },
   subtotal: { type: Number, min: 0, required: true },
   discount: { type: Number, min: 0, default: 0 },
   deliveryFee: { type: Number, min: 0, default: 0 },

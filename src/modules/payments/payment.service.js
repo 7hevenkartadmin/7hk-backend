@@ -20,6 +20,7 @@ export const CHECKOUT_TTL_MS = 15 * 60 * 1000;
 export const CAPTURED_RESERVATION_GRACE_MS = 30 * 60 * 1000;
 export const AUTHORIZED_RESERVATION_MAX_MS = 30 * 60 * 1000;
 export const MIN_RAZORPAY_ORDER_AMOUNT_PAISE = 100;
+export const MAX_ACTIVE_PAYMENT_SESSIONS_PER_CUSTOMER = 3;
 const AUTHORIZED_RESERVATION_GRACE_MS = 10 * 60 * 1000;
 const PROVIDER_TIMEOUT_MS = 10000;
 const REFUND_RECONCILE_DELAY_MS = 60 * 1000;
@@ -84,6 +85,23 @@ function dedupeKey(userId, cartHash) {
 
 function sameId(left, right) {
   return String(left || '') === String(right || '');
+}
+
+export function paymentDeliveryAddressSnapshot(address) {
+  const source = typeof address?.toObject === 'function' ? address.toObject() : address || {};
+  return {
+    recipientName: source.recipientName,
+    phone: source.phone,
+    line1: source.line1,
+    line2: source.line2 || '',
+    landmark: source.landmark || '',
+    city: source.city,
+    state: source.state,
+    pincode: source.pincode,
+    latitude: source.latitude,
+    longitude: source.longitude,
+    distanceFromStoreKm: source.distanceFromStoreKm,
+  };
 }
 
 export function assertRazorpayOrderAmount(amountPaise) {
@@ -186,7 +204,12 @@ async function releaseReservationResources(intent, reason, session) {
   await releaseReservedInventory(intent.reservation.items, session);
   await releaseSlot(intent.reservation.slot, session);
   if (intent.reservation.coupon) {
-    await releaseCouponReservation(intent.reservation.coupon, session);
+    await releaseCouponReservation({
+      redemptionId: intent.reservation.couponRedemption,
+      couponId: intent.reservation.coupon,
+      reason,
+      session,
+    });
   }
   intent.reservation.state = 'released';
   intent.reservation.releasedAt = new Date();
@@ -301,11 +324,21 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
     return toCheckoutPaymentSession(await reusableIntent(existing, expected));
   }
 
+  const activeSessions = await PaymentIntent.countDocuments({
+    user: customer._id,
+    status: { $in: ['initializing', 'created', 'authorized', 'verified', 'processing'] },
+    'reservation.state': { $in: ['held', 'consuming'] },
+  });
+  if (activeSessions >= MAX_ACTIVE_PAYMENT_SESSIONS_PER_CUSTOMER) {
+    throw new AppError('Too many active payment sessions. Resume or abandon an existing checkout before starting another.', 429, 'PAYMENT_SESSION_LIMIT');
+  }
+
   const items = await hydrateCheckoutItems(payload.items);
   const subtotalOnly = calculateCartTotals({ items }).subtotal;
-  const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly);
+  const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly, customer._id);
   const address = await findOwnedAddress(customer._id, payload.addressId);
   if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
+  const deliveryAddress = paymentDeliveryAddressSnapshot(address);
   await assertStoreAcceptingOrders({ distanceKm: address.distanceFromStoreKm });
   const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(address.distanceFromStoreKm, defaultDeliveryFee(subtotalOnly));
   const totals = calculateCartTotals({ items, couponDiscount: discount, deliveryFee });
@@ -320,9 +353,11 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
     })),
     couponCode: String(payload.couponCode || '').trim().toUpperCase(),
     slotId: String(payload.slotId),
+    deliveryAddress,
     totals,
   };
 
+  const candidateIntentId = new mongoose.Types.ObjectId();
   const session = await mongoose.startSession();
   let intent;
   let createdIntent = false;
@@ -337,10 +372,24 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
         return;
       }
       const reserved = await reserveInventory(payload.items, session);
-      await reserveSlot(payload.slotId, session);
-      const claimedCoupon = coupon ? await claimCoupon(coupon._id, subtotalOnly, session) : null;
+      const reservedSlot = await reserveSlot(payload.slotId, session);
+      checkoutSnapshot.deliverySlot = {
+        slotId: String(reservedSlot._id),
+        date: reservedSlot.date,
+        startsAt: reservedSlot.startsAt,
+        endsAt: reservedSlot.endsAt,
+        serviceArea: reservedSlot.serviceArea,
+      };
+      const couponClaim = coupon ? await claimCoupon({
+        couponId: coupon._id,
+        userId: customer._id,
+        subtotal: subtotalOnly,
+        session,
+        paymentIntentId: candidateIntentId,
+      }) : null;
       const expiresAt = new Date(Date.now() + CHECKOUT_TTL_MS);
       intent = new PaymentIntent({
+        _id: candidateIntentId,
         user: customer._id,
         idempotencyKey,
         activeDedupeKey,
@@ -357,7 +406,8 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
           items: reserved.items,
           expiresAt,
           slot: payload.slotId,
-          coupon: claimedCoupon?._id,
+          coupon: couponClaim?.coupon?._id,
+          couponRedemption: couponClaim?.redemption?._id,
         },
         status: 'initializing',
         expiresAt,
@@ -396,8 +446,8 @@ export function verifyRazorpaySignature(payload, trustedOrderId = payload.razorp
   if (!timingSafeHexEqual(expected, payload.razorpay_signature)) throw new AppError('Payment signature verification failed', 400, 'PAYMENT_SIGNATURE_INVALID');
 }
 
-export function validateProviderPayment(payment, intent) {
-  if (!payment?.id || payment.order_id !== intent.providerOrderId
+export function validateProviderPayment(payment, intent, expectedPaymentId) {
+  if (!payment?.id || (expectedPaymentId && payment.id !== expectedPaymentId) || payment.order_id !== intent.providerOrderId
     || Number(payment.amount) !== Number(intent.amountPaise) || payment.currency !== intent.currency) {
     throw new AppError('Payment does not match the checkout session', 409, 'PAYMENT_PROVIDER_MISMATCH');
   }
@@ -697,11 +747,9 @@ async function fetchProviderPayment(paymentId) {
   }
 }
 
-async function findCustomerIntent(customer, { paymentSessionId, razorpay_order_id: providerOrderId }) {
-  const filter = { user: customer._id };
-  if (paymentSessionId) filter._id = paymentSessionId;
-  else filter.providerOrderId = providerOrderId;
-  const intent = await PaymentIntent.findOne(filter);
+async function findCustomerIntent(customer, { paymentSessionId }) {
+  if (!paymentSessionId) throw new AppError('Invalid payment session ID', 422, 'PAYMENT_SESSION_ID_INVALID');
+  const intent = await PaymentIntent.findOne({ _id: paymentSessionId, user: customer._id });
   if (!intent) throw new AppError('Payment session not found', 404, 'PAYMENT_INTENT_NOT_FOUND');
   return intent;
 }
@@ -716,7 +764,7 @@ export async function verifyRazorpayPayment(payload, customer) {
   let payment;
   for (const delay of [0, 400, 900, 1600]) {
     if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
-    payment = validateProviderPayment(await fetchProviderPayment(payload.razorpay_payment_id), intent);
+    payment = validateProviderPayment(await fetchProviderPayment(payload.razorpay_payment_id), intent, payload.razorpay_payment_id);
     if (payment.status === 'captured') break;
     if (!['created', 'authorized'].includes(payment.status)) break;
   }
@@ -751,6 +799,54 @@ export async function getPaymentSession(sessionId, customer) {
   return toCheckoutPaymentSession(await findCustomerIntent(customer, { paymentSessionId: sessionId }));
 }
 
+export async function abandonRazorpayPaymentSession(sessionId, customer) {
+  let intent = await findCustomerIntent(customer, { paymentSessionId: sessionId });
+  if (intent.status === 'created') intent = await reconcileIntentFromProvider(intent);
+
+  if (intent.status === 'failed' && intent.failureCode === 'CLIENT_ABANDONED' && intent.reservation?.state === 'released') {
+    return toCheckoutPaymentSession(intent);
+  }
+  if (!['created', 'failed'].includes(intent.status)) {
+    throw new AppError('This payment session can no longer be abandoned safely. Reconcile it before taking another action.', 409, 'PAYMENT_ABANDON_NOT_ALLOWED');
+  }
+
+  const session = await mongoose.startSession();
+  let abandoned;
+  try {
+    await session.withTransaction(async () => {
+      const query = PaymentIntent.findOne({
+        _id: sessionId,
+        user: customer._id,
+        status: { $in: ['created', 'failed'] },
+        'reservation.state': { $in: ['held', 'released'] },
+      });
+      query.session(session);
+      const current = await query;
+      if (!current) return;
+      if (current.reservation.state === 'held') {
+        await releaseReservationResources(current, 'CLIENT_ABANDONED', session);
+      }
+      current.status = 'failed';
+      current.failureCode = 'CLIENT_ABANDONED';
+      current.failureDescription = undefined;
+      current.activeDedupeKey = undefined;
+      await current.save({ session });
+      abandoned = current;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (!abandoned) {
+    const current = await findCustomerIntent(customer, { paymentSessionId: sessionId });
+    if (current.status === 'failed' && current.failureCode === 'CLIENT_ABANDONED' && current.reservation?.state === 'released') {
+      return toCheckoutPaymentSession(current);
+    }
+    throw new AppError('Payment state changed while the session was being abandoned. Reconcile it before continuing.', 409, 'PAYMENT_ABANDON_NOT_ALLOWED');
+  }
+  return toCheckoutPaymentSession(abandoned);
+}
+
 export async function getVerifiedPaymentIntentForOrder(paymentSessionId, customer, session) {
   const query = PaymentIntent.findOne({
     _id: paymentSessionId,
@@ -761,7 +857,8 @@ export async function getVerifiedPaymentIntentForOrder(paymentSessionId, custome
   if (session) query.session(session);
   const intent = await query;
   if (!intent) throw new AppError('Payment session is not captured, verified, and reserved', 409, 'PAYMENT_NOT_VERIFIED');
-  if (!intent.checkoutSnapshot?.items || !intent.checkoutSnapshot?.totals) {
+  if (!intent.checkoutSnapshot?.items || !intent.checkoutSnapshot?.totals
+    || !intent.checkoutSnapshot?.deliveryAddress || !intent.checkoutSnapshot?.deliverySlot) {
     throw new AppError('Payment session is missing its checkout snapshot', 409, 'PAYMENT_SNAPSHOT_MISSING');
   }
   return intent;
@@ -772,7 +869,8 @@ export async function getReservedSlotForIntent(intent, session) {
   if (session) query.session(session);
   const slot = await query;
   if (!slot) throw new AppError('Reserved delivery slot not found', 409, 'SLOT_RESERVATION_MISSING');
-  return slot;
+  const paidSlot = intent.checkoutSnapshot?.deliverySlot;
+  return paidSlot ? { _id: slot._id, ...paidSlot } : slot;
 }
 
 export async function createCapturedRazorpayPaymentForOrder(order, intent, session) {

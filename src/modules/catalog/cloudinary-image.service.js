@@ -2,7 +2,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { env } from '../../config/env.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
-const uploadKinds = new Set(['product', 'gallery', 'variant', 'category', 'banner']);
+const uploadKinds = new Set(['product', 'gallery', 'variant', 'category', 'banner', 'coupon']);
 const configured = Boolean(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET);
 
 if (configured) {

@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { parseStoreDate } from '../../shared/utils/storeDate.js';
 
 export const deliverySlotSchema = z.object({
-  date: z.coerce.date(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => Boolean(parseStoreDate(value)), 'Date must be a real Asia/Kolkata calendar date'),
   startsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   endsAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   capacity: z.number().int().positive(),
