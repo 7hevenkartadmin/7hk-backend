@@ -77,6 +77,27 @@ const REQUIRED_PRODUCTION_INDEXES = [
   }],
   ['deliveryslots', { date: 1, startsAt: 1, serviceArea: 1 }, { name: 'delivery_slot_unique' }],
   ['logincompletions', { proofDigest: 1 }, { name: 'login_completion_proof_digest_unique' }],
+  ['restrictedproductconsents', { expiresAt: 1 }, {
+    name: 'restricted_product_consent_expiry',
+    unique: false,
+    expireAfterSeconds: 0,
+  }],
+  ['restrictedproductconsents', { user: 1, addressId: 1, policyVersion: 1, expiresAt: -1 }, {
+    name: 'restricted_product_consent_lookup',
+    unique: false,
+  }],
+  ['supporttickets', { providerRefundId: 1 }, {
+    name: 'support_ticket_provider_refund',
+    partialFilterExpression: { providerRefundId: { $type: 'string' } },
+  }],
+  ['supporttickets', { activeOrderKey: 1 }, {
+    name: 'support_ticket_active_order_unique',
+    partialFilterExpression: { activeOrderKey: { $type: 'string' } },
+  }],
+  ['supporttickets', { status: 1, createdAt: -1 }, {
+    name: 'support_ticket_status_created',
+    unique: false,
+  }],
 ];
 
 const USER_PHONE_INDEX_NAME = 'user_phone_unique_when_present';

@@ -31,6 +31,9 @@ const userSchema = new mongoose.Schema({
   refreshTokenHash: { type: String, select: false },
   tokenVersion: { type: Number, default: 0, min: 0 },
   lastLoginAt: Date,
+  rejectedTicketsCount: { type: Number, min: 0, default: 0 },
+  isCodDisabled: { type: Boolean, default: false, index: true },
+  codDisabledAt: Date,
 }, { timestamps: true });
 
 userSchema.index({ phone: 1 }, {

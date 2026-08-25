@@ -2,7 +2,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { env } from '../../config/env.js';
 import { AppError } from '../../shared/utils/AppError.js';
 
-const uploadKinds = new Set(['product', 'gallery', 'variant', 'category', 'banner', 'coupon']);
+const uploadKinds = new Set(['product', 'gallery', 'variant', 'category', 'banner', 'coupon', 'support-proof']);
 const configured = Boolean(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET);
 
 if (configured) {
@@ -50,7 +50,7 @@ export async function uploadCatalogImage(file, { kind = 'product', actorId } = {
       unique_filename: true,
       overwrite: false,
       use_filename: false,
-      tags: ['7heven', 'admin-upload', kind],
+      tags: ['7heven', kind === 'support-proof' ? 'customer-upload' : 'admin-upload', kind],
       context: actorId ? { uploaded_by: String(actorId), purpose: kind } : { purpose: kind },
     });
   } catch {

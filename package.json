@@ -13,6 +13,7 @@
     "migrate:products": "node src/scripts/normalize-products.js",
     "migrate:coupon-redemptions": "node src/scripts/migrate-coupon-redemptions.js",
     "migrate:admin-access": "node src/scripts/migrate-admin-access.js",
+    "catalog:import-paan": "node src/scripts/import-paan-corner.js",
     "owner:create": "node src/scripts/create-owner.js",
     "owner:reset-password": "node src/scripts/reset-owner-password.js",
     "test": "node --import ./tests/setup-env.js --test --test-concurrency=1 tests/*.test.js",

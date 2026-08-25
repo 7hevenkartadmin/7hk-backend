@@ -26,8 +26,8 @@ export function extractRazorpayWebhookPayment(payload) {
   return payload?.payload?.payment?.entity || null;
 }
 
-export async function applyRefund(refund) {
-  return applyRazorpayRefund(refund);
+export async function applyRefund(refund, eventType) {
+  return applyRazorpayRefund(refund, eventType);
 }
 
 export async function processWebhook(payload) {
@@ -52,8 +52,8 @@ export async function processWebhook(payload) {
     }
     return Boolean(intent);
   }
-  if (payload.event === 'refund.processed') {
-    await applyRefund(payload?.payload?.refund?.entity);
+  if (['refund.created', 'refund.processed', 'refund.failed'].includes(payload.event)) {
+    await applyRefund(payload?.payload?.refund?.entity, payload.event);
     return true;
   }
   return false;

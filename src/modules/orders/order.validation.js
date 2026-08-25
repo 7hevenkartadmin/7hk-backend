@@ -23,6 +23,7 @@ export const createOrderSchema = quoteOrderSchema.extend({
   paymentMethod: z.enum(['razorpay', 'cod']),
   paymentSessionId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
   codTermsAccepted: z.boolean().optional().default(false),
+  restrictedProductConsentId: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
 })
   .superRefine((data, context) => {
     if (data.paymentMethod === 'razorpay' && !data.paymentSessionId) {
@@ -44,4 +45,9 @@ export const updateStatusSchema = z.object({
 
 export const verifyDeliveryOtpSchema = z.object({
   otp: z.string().regex(/^\d{6}$/, 'Delivery OTP must contain 6 digits'),
-});
+  restrictedProductChecksConfirmed: z.boolean().optional().default(false),
+}).strict();
+
+export const customerCancelOrderSchema = z.object({
+  reason: z.string().trim().min(3).max(240),
+}).strict();

@@ -15,6 +15,7 @@ import { assertStoreAcceptingOrders } from '../settings/storeAvailability.servic
 import { PaymentIntent } from './paymentIntent.model.js';
 import { findOwnedAddress } from '../addresses/address.service.js';
 import { Payment } from './payment.model.js';
+import { assertOnlinePaymentAllowed } from './payment-policy.js';
 
 export const CHECKOUT_TTL_MS = 15 * 60 * 1000;
 export const CAPTURED_RESERVATION_GRACE_MS = 30 * 60 * 1000;
@@ -146,7 +147,9 @@ export async function createPaymentForOrder(order, session) {
 
 async function hydrateCheckoutItems(inputItems) {
   const ids = inputItems.map((item) => item.productId);
-  const products = await Product.find({ _id: { $in: ids }, isActive: true });
+  const query = Product.find({ _id: { $in: ids }, isActive: true });
+  if (typeof query.populate === 'function') query.populate('categoryRef', 'name slug');
+  const products = await query;
   const byId = new Map(products.map((product) => [String(product._id), product]));
   return inputItems.map((item) => {
     const product = byId.get(item.productId);
@@ -314,6 +317,7 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
   let existing = await PaymentIntent.findOne({ user: customer._id, idempotencyKey });
   if (!existing) existing = await PaymentIntent.findOne({ activeDedupeKey });
   if (existing) {
+    assertOnlinePaymentAllowed(existing.checkoutSnapshot?.items || []);
     const existingTotal = existing.checkoutSnapshot?.totals?.total;
     const expected = {
       cartHash: createCartHash(payload.items, payload.couponCode, existingTotal, payload.addressId, payload.slotId),
@@ -334,6 +338,7 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
   }
 
   const items = await hydrateCheckoutItems(payload.items);
+  assertOnlinePaymentAllowed(items);
   const subtotalOnly = calculateCartTotals({ items }).subtotal;
   const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly, customer._id);
   const address = await findOwnedAddress(customer._id, payload.addressId);
@@ -350,6 +355,7 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
       productId: String(item.product._id), variantId: item.variant?._id ? String(item.variant._id) : '',
       quantity: item.quantity, price: item.price, mrp: item.mrp, taxRate: item.taxRate,
       name: item.name, sku: item.sku, unit: item.unit, image: item.image, category: item.product.category,
+      categorySlug: item.product.categoryRef?.slug,
     })),
     couponCode: String(payload.couponCode || '').trim().toUpperCase(),
     slotId: String(payload.slotId),
@@ -650,6 +656,13 @@ async function refundIntentPayment(intent, reasonCode = intent.refundReason || '
           },
         },
       );
+      await syncOrderRefundState({
+        id: claimed.refundId || claimed.refundReceipt,
+        payment_id: paymentId,
+        amount: claimed.refundAmountPaise,
+        status: 'failed',
+        error_code: 'AUTOMATIC_REFUND_UNCONFIRMED',
+      }, 'refund_failed');
       throw new AppError('Payment was captured but automatic refund could not be confirmed. Support review is required.', 503, 'PAYMENT_REFUND_REQUIRES_REVIEW');
     }
   }
@@ -671,7 +684,11 @@ async function refundIntentPayment(intent, reasonCode = intent.refundReason || '
       $unset: { activeDedupeKey: 1 },
     },
   );
-  if (refund.status === 'processed') await applyRazorpayRefund(refund);
+  if (refund.status === 'processed') {
+    await applyRazorpayRefund(refund, 'refund.processed');
+  } else {
+    await syncOrderRefundState(refund, refund.status === 'failed' ? 'refund_failed' : 'refund_pending');
+  }
   return PaymentIntent.findById(claimed._id);
 }
 
@@ -756,6 +773,7 @@ async function findCustomerIntent(customer, { paymentSessionId }) {
 
 export async function verifyRazorpayPayment(payload, customer) {
   const intent = await findCustomerIntent(customer, payload);
+  assertOnlinePaymentAllowed(intent.checkoutSnapshot?.items || []);
   verifyRazorpaySignature(payload, intent.providerOrderId);
   if (['verified', 'consumed', 'refund_pending', 'refunded', 'refund_failed'].includes(intent.status)) return toCheckoutPaymentSession(intent);
   if (intent.verifiedPaymentId && intent.verifiedPaymentId !== payload.razorpay_payment_id) {
@@ -792,6 +810,7 @@ async function reconcileIntentFromProvider(intent) {
 
 export async function reconcileRazorpayPaymentSession(sessionId, customer) {
   const intent = await findCustomerIntent(customer, { paymentSessionId: sessionId });
+  assertOnlinePaymentAllowed(intent.checkoutSnapshot?.items || []);
   return toCheckoutPaymentSession(await reconcileIntentFromProvider(intent));
 }
 
@@ -861,6 +880,7 @@ export async function getVerifiedPaymentIntentForOrder(paymentSessionId, custome
     || !intent.checkoutSnapshot?.deliveryAddress || !intent.checkoutSnapshot?.deliverySlot) {
     throw new AppError('Payment session is missing its checkout snapshot', 409, 'PAYMENT_SNAPSHOT_MISSING');
   }
+  assertOnlinePaymentAllowed(intent.checkoutSnapshot.items);
   return intent;
 }
 
@@ -918,13 +938,84 @@ export async function completeRazorpayPaymentIntent(intentId, orderId, session) 
   );
 }
 
-export async function applyRazorpayRefund(refund) {
+async function syncOrderRefundState(refund, status) {
+  const payment = await Payment.findOne({ providerPaymentId: refund.payment_id });
+  const intent = await PaymentIntent.findOne({
+    $or: [{ providerPaymentId: refund.payment_id }, { verifiedPaymentId: refund.payment_id }],
+  });
+  const orderId = payment?.order || intent?.order;
+  if (!orderId) return null;
+
+  const arn = refund?.acquirer_data?.arn || refund?.acquirer_data?.utr || refund?.arn || undefined;
+  const amount = Number(refund.amount) / 100;
+  const now = new Date();
+  const paymentStatus = status;
+  const eventKey = `${refund.id}:${status}`;
+  const reason = payment?.refundReason || intent?.refundReason || 'ORDER_REFUND';
+  const mutablePaymentStatuses = ['pending', 'paid', 'partially_refunded', 'refund_pending', 'refund_failed'];
+  const { Order } = await import('../orders/order.model.js');
+  const stateUpdate = await Order.updateOne(
+    { _id: orderId, paymentStatus: { $in: mutablePaymentStatuses }, 'refundTimeline.eventKey': { $ne: eventKey } },
+    {
+      $set: {
+        paymentStatus,
+        'refund.providerRefundId': refund.id,
+        'refund.status': status,
+        'refund.amount': amount,
+        'refund.reason': reason,
+        'refund.arn': arn,
+        'refund.requiresManualReview': status === 'refund_failed',
+        ...(status === 'refund_pending' ? { 'refund.initiatedAt': now } : {}),
+        ...(status === 'refund_failed' ? { 'refund.failedAt': now } : {}),
+        ...(['refunded', 'partially_refunded'].includes(status) ? { 'refund.processedAt': now } : {}),
+      },
+    },
+  );
+  if (stateUpdate?.matchedCount === 0) return orderId;
+  await Order.updateOne(
+    { _id: orderId, paymentStatus, 'refundTimeline.eventKey': { $ne: eventKey } },
+    {
+      $set: { paymentStatus },
+      $push: { refundTimeline: {
+        eventKey,
+        status,
+        providerRefundId: refund.id,
+        amount,
+        arn,
+        note: status === 'refund_failed' ? 'Razorpay refund failed; manual review required' : status === 'refund_pending' ? 'Razorpay refund initiated' : 'Razorpay refund processed',
+        at: now,
+      } },
+    },
+  );
+  if (reason === 'SUPPORT_TICKET_APPROVED') {
+    const { SupportTicket } = await import('../support/supportTicket.model.js');
+    const ticketStatus = status === 'partially_refunded' ? 'refunded' : status;
+    await SupportTicket.updateOne(
+      { order: orderId, status: { $in: ['processing', 'refund_pending', 'refund_failed'] } },
+      {
+        $set: { status: ticketStatus, providerRefundId: refund.id, refundAmount: amount, refundArn: arn },
+        ...(['refunded'].includes(ticketStatus) ? { $unset: { activeOrderKey: 1 } } : {}),
+      },
+    );
+  }
+  return orderId;
+}
+
+export async function applyRazorpayRefund(refund, eventType) {
   if (!refund?.id || !refund?.payment_id || !Number.isFinite(Number(refund.amount))) return null;
   if (refund.status !== 'processed') {
+    const failed = refund.status === 'failed' || eventType === 'refund.failed';
     await PaymentIntent.updateOne(
       { $or: [{ providerPaymentId: refund.payment_id }, { verifiedPaymentId: refund.payment_id }], status: { $nin: ['refunded'] } },
-      { $set: { status: 'refund_pending', providerStatus: 'refund_pending', refundId: refund.id, refundStatus: refund.status } },
+      { $set: {
+        status: failed ? 'refund_failed' : 'refund_pending',
+        providerStatus: failed ? 'refund_failed' : 'refund_pending',
+        refundId: refund.id,
+        refundStatus: refund.status,
+        ...(failed ? { failureCode: refund.error_code || 'RAZORPAY_REFUND_FAILED' } : {}),
+      } },
     );
+    await syncOrderRefundState(refund, failed ? 'refund_failed' : 'refund_pending');
     return null;
   }
 
@@ -991,6 +1082,7 @@ export async function applyRazorpayRefund(refund) {
     } else if (intent.reservation?.state === 'held') {
       await queuePaymentIntentRefund(intent._id, 'MANUAL_PARTIAL_REFUND', { releaseHeld: true });
     }
+    await syncOrderRefundState(refund, fullyRefunded ? 'refunded' : 'partially_refunded');
     return PaymentIntent.findById(intent._id);
   }
 
@@ -1032,6 +1124,7 @@ export async function applyRazorpayRefund(refund) {
       { $set: update, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
     );
   }
+  await syncOrderRefundState(refund, fullyRefunded ? 'refunded' : 'partially_refunded');
   return payment;
 }
 

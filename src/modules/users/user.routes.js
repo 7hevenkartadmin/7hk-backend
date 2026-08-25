@@ -13,6 +13,9 @@ import {
 } from '../addresses/address.service.js';
 import { addressSchema, validateAddressLocationSchema } from '../addresses/address.validation.js';
 import { updateProfileSchema } from './user.validation.js';
+import { restrictedProductConsentRateLimiter } from '../../shared/middlewares/rateLimiters.js';
+import { recordRestrictedProductConsent } from '../compliance/restrictedProductConsent.service.js';
+import { restrictedProductConsentSchema } from '../compliance/restrictedProductConsent.validation.js';
 
 export const userRoutes = Router();
 
@@ -33,6 +36,10 @@ userRoutes.patch('/me', validate(updateProfileSchema), asyncHandler(async (req, 
   Object.assign(req.user, req.body);
   await req.user.save();
   ok(res, { user: await profileWithAddresses(req.user) }, 'Profile updated');
+}));
+
+userRoutes.post('/me/restricted-product-consents', restrictedProductConsentRateLimiter, validate(restrictedProductConsentSchema), asyncHandler(async (req, res) => {
+  ok(res, { consent: await recordRestrictedProductConsent(req.user, req.body) }, 'Restricted-product acknowledgement recorded', 201);
 }));
 
 userRoutes.post('/me/addresses/validate', validate(validateAddressLocationSchema), asyncHandler(async (req, res) => {

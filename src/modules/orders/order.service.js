@@ -31,6 +31,12 @@ import { env } from '../../config/env.js';
 import { deliveryFeeForDistance, getCodSettings } from '../settings/settings.service.js';
 import { assertStoreAcceptingOrders, getStoreAvailability } from '../settings/storeAvailability.service.js';
 import { PaymentIntent } from '../payments/paymentIntent.model.js';
+import { User } from '../users/user.model.js';
+import { assertPaymentMethodAllowed, paymentPolicyForItems } from '../payments/payment-policy.js';
+import {
+  assertRestrictedProductConsentForOrder,
+  assertRestrictedProductCouponAllowed,
+} from '../compliance/restrictedProductConsent.service.js';
 import { deliveryOtpForOrder, matchesDeliveryOtp } from './delivery-otp.service.js';
 import { findOwnedAddress } from '../addresses/address.service.js';
 import {
@@ -52,6 +58,10 @@ const allowedTransitions = {
 
 export function canTransitionOrderStatus(currentStatus, nextStatus) {
   return Boolean(allowedTransitions[currentStatus]?.includes(nextStatus));
+}
+
+export function canCustomerCancelOrder(status) {
+  return status === 'placed' || status === 'confirmed';
 }
 
 function enforceDeliveryRadius(address) {
@@ -90,6 +100,7 @@ function purchasableVariant(product, variantId) {
 async function hydrateItems(inputItems, session, { checkAvailability = true } = {}) {
   const ids = inputItems.map((item) => item.productId);
   const query = Product.find({ _id: { $in: ids }, isActive: true });
+  if (typeof query.populate === 'function') query.populate('categoryRef', 'name slug');
   if (session) query.session(session);
   const products = await query;
   const byId = new Map(products.map((product) => [String(product._id), product]));
@@ -151,6 +162,20 @@ function applyCheckoutSnapshot(items, snapshot) {
 
 export async function quoteOrder(customer, payload) {
   const items = await hydrateItems(payload.items);
+  const basePaymentPolicy = paymentPolicyForItems(items);
+  const codAccountDisabled = Boolean(customer.isCodDisabled || await User.exists({ _id: customer._id, isCodDisabled: true }));
+  const paymentPolicy = codAccountDisabled
+    ? {
+      ...basePaymentPolicy,
+      allowedPaymentMethods: basePaymentPolicy.onlinePaymentAvailable ? ['razorpay'] : [],
+      cashOnDeliveryRequired: false,
+      reasonCode: basePaymentPolicy.onlinePaymentAvailable ? 'COD_ACCOUNT_DISABLED' : 'NO_ELIGIBLE_PAYMENT_METHOD',
+      message: basePaymentPolicy.onlinePaymentAvailable
+        ? 'Cash on delivery is disabled for this account. Please use online payment.'
+        : 'This account has no eligible payment method for the restricted items in this cart.',
+    }
+    : basePaymentPolicy;
+  const restrictedProductPolicy = assertRestrictedProductCouponAllowed(items, payload.couponCode);
   const subtotalOnly = calculateCartTotals({ items }).subtotal;
   const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly, customer._id);
   const selectedAddress = payload.addressId ? await findOwnedAddress(customer._id, payload.addressId) : null;
@@ -177,6 +202,8 @@ export async function quoteOrder(customer, payload) {
     })),
     coupon: coupon ? { code: coupon.code, discount } : null,
     totals,
+    paymentPolicy,
+    restrictedProductPolicy,
   };
 }
 
@@ -194,7 +221,7 @@ export async function createOrder(customer, payload) {
   } catch (error) {
     if (error?.code !== 20 && !String(error?.message || '').includes('Transaction numbers are only allowed')) {
       if (payload.paymentMethod === 'razorpay'
-        && ['PRODUCT_NOT_FOUND', 'VARIANT_UNAVAILABLE', 'INVENTORY_RESERVATION_MISMATCH', 'ADDRESS_NOT_FOUND', 'OUT_OF_DELIVERY_RADIUS', 'SLOT_RESERVATION_MISSING', 'COUPON_RESERVATION_MISMATCH', 'PAYMENT_SNAPSHOT_MISSING'].includes(error?.code)) {
+        && ['PRODUCT_NOT_FOUND', 'VARIANT_UNAVAILABLE', 'INVENTORY_RESERVATION_MISMATCH', 'ADDRESS_NOT_FOUND', 'OUT_OF_DELIVERY_RADIUS', 'SLOT_RESERVATION_MISSING', 'COUPON_RESERVATION_MISMATCH', 'PAYMENT_SNAPSHOT_MISSING', 'PAYMENT_METHOD_NOT_ALLOWED'].includes(error?.code)) {
         const refund = await refundUnfulfillablePayment(payload.paymentSessionId, customer, error.code);
         if (!refund) {
           throw new AppError('This payment is already being finalized by another request.', 409, 'PAYMENT_FINALIZATION_IN_PROGRESS');
@@ -245,11 +272,20 @@ async function performCreateOrder(customer, payload, session) {
     slot = await getReservedSlotForIntent(paymentPreview, session);
   } else {
     items = await hydrateItems(payload.items, session);
+    assertRestrictedProductCouponAllowed(items, payload.couponCode);
     subtotalOnly = calculateCartTotals({ items }).subtotal;
     const validatedCoupon = await validateCoupon(payload.couponCode, subtotalOnly, customer._id, session);
     coupon = validatedCoupon.coupon;
     couponDiscount = validatedCoupon.discount;
   }
+  assertPaymentMethodAllowed(items, payload.paymentMethod);
+  const restrictedProductConsent = await assertRestrictedProductConsentForOrder({
+    items,
+    customer,
+    consentId: payload.restrictedProductConsentId,
+    addressId: payload.addressId,
+    session,
+  });
 
   const address = await findOwnedAddress(customer._id, payload.addressId, session);
   if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
@@ -315,6 +351,7 @@ async function performCreateOrder(customer, payload, session) {
     paymentMethod: payload.paymentMethod,
     paymentStatus: 'pending',
     paymentIntent: paymentIntent?._id,
+    restrictedProductConsent,
     statusTimeline: [{ status: 'placed', note: 'Order placed', actor: customer._id }],
   }], { session });
 
@@ -367,6 +404,9 @@ async function assertOrderAvailability(customer, payload, distanceKm, session) {
 async function validateCodEligibility(customer, payload, totals) {
   const settings = await getCodSettings();
   if (!settings.isEnabled) throw new AppError('Cash on delivery is currently unavailable. Please choose online payment.', 422, 'COD_DISABLED');
+  if (customer.isCodDisabled || await User.exists({ _id: customer._id, isCodDisabled: true })) {
+    throw new AppError('Cash on delivery is disabled for this account. Please use online payment.', 403, 'COD_ACCOUNT_DISABLED');
+  }
   if (!payload.codTermsAccepted) throw new AppError('Please accept the cash on delivery terms before placing the order.', 422, 'COD_TERMS_REQUIRED');
   if (settings.maxOrderValue > 0 && totals.total > settings.maxOrderValue) {
     throw new AppError(`Cash on delivery is available up to Rs. ${settings.maxOrderValue}. Please choose online payment.`, 422, 'COD_ORDER_VALUE_LIMIT');
@@ -413,18 +453,33 @@ export async function getOrderForCustomer(orderIdOrNumber, customer) {
   return customerOrderPayload(order);
 }
 
-export async function verifyDeliveryOtp(id, otp, actor) {
-  const current = await Order.findById(id).select('_id status paymentMethod');
+export async function verifyDeliveryOtp(id, otp, actor, { restrictedProductChecksConfirmed = false } = {}) {
+  const current = await Order.findById(id).select('_id status paymentMethod restrictedProductConsent');
   if (!current) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
   if (current.status !== 'out_for_delivery') {
     throw new AppError('Delivery OTP can only be verified for an out-for-delivery order', 409, 'DELIVERY_OTP_NOT_READY');
   }
+  if (current.restrictedProductConsent?.policyVersion && restrictedProductChecksConfirmed !== true) {
+    throw new AppError(
+      'Confirm the adult ID and educational-institution distance checks before restricted-product handover.',
+      422,
+      'RESTRICTED_PRODUCT_DELIVERY_CHECKS_REQUIRED',
+    );
+  }
   if (!matchesDeliveryOtp(current._id, otp)) throw new AppError('Invalid delivery OTP', 401, 'DELIVERY_OTP_INVALID');
+  const deliveredAt = new Date();
   const order = await Order.findOneAndUpdate(
     { _id: current._id, status: 'out_for_delivery' },
     {
-      $set: { status: 'delivered', ...(current.paymentMethod === 'cod' ? { paymentStatus: 'paid' } : {}) },
-      $push: { statusTimeline: { status: 'delivered', note: 'Delivery verified with customer OTP', actor: actor._id, at: new Date() } },
+      $set: {
+        status: 'delivered',
+        ...(current.paymentMethod === 'cod' ? { paymentStatus: 'paid' } : {}),
+        ...(current.restrictedProductConsent?.policyVersion ? {
+          'restrictedProductConsent.deliveryEligibilityVerifiedAt': deliveredAt,
+          'restrictedProductConsent.deliveryEligibilityVerifiedBy': actor._id,
+        } : {}),
+      },
+      $push: { statusTimeline: { status: 'delivered', note: current.restrictedProductConsent?.policyVersion ? 'Delivery verified with customer OTP and restricted-product eligibility checks' : 'Delivery verified with customer OTP', actor: actor._id, at: deliveredAt } },
     },
     { new: true, runValidators: true },
   );
@@ -437,7 +492,7 @@ export async function verifyDeliveryOtp(id, otp, actor) {
   return order;
 }
 
-export async function cancelOrder(id, payload, actor) {
+export async function cancelOrder(id, payload, actor, { customerInitiated = false } = {}) {
   const session = await mongoose.startSession();
   let order;
   let changes = [];
@@ -449,7 +504,13 @@ export async function cancelOrder(id, payload, actor) {
       query.session(session);
       order = await query;
       if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+      if (customerInitiated && String(order.customer) !== String(actor._id)) {
+        throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+      }
       if (order.status === 'cancelled') return;
+      if (customerInitiated && !canCustomerCancelOrder(order.status)) {
+        throw new AppError('This order can no longer be cancelled because packing has started.', 409, 'ORDER_CANCELLATION_CLOSED');
+      }
       if (!canTransitionOrderStatus(order.status, 'cancelled')) {
         throw new AppError(`Invalid order status transition from ${order.status} to cancelled`, 409, 'INVALID_ORDER_TRANSITION');
       }
@@ -462,9 +523,27 @@ export async function cancelOrder(id, payload, actor) {
         order.inventoryRestoredAt = new Date();
       }
       order.status = 'cancelled';
+      order.statusTimeline = order.statusTimeline || [];
       order.statusTimeline.push({ status: 'cancelled', note: payload.note || 'Order cancelled', actor: actor._id });
       if (order.paymentMethod === 'razorpay' && ['paid', 'partially_refunded'].includes(order.paymentStatus)) {
         refundQueued = Boolean(await queueOrderRefund(order, 'ORDER_CANCELLED', session));
+        if (refundQueued) {
+          order.paymentStatus = 'refund_pending';
+          order.refund = {
+            status: 'refund_pending',
+            amount: order.total,
+            reason: 'ORDER_CANCELLED',
+            initiatedAt: new Date(),
+            requiresManualReview: false,
+          };
+          order.refundTimeline = order.refundTimeline || [];
+          order.refundTimeline.push({
+            eventKey: `cancel:${order._id}`,
+            status: 'refund_pending',
+            amount: order.total,
+            note: 'Automatic refund requested after customer cancellation',
+          });
+        }
       }
       await order.save({ session });
       changed = true;
@@ -478,12 +557,25 @@ export async function cancelOrder(id, payload, actor) {
   if (refundQueued) {
     try {
       await initiateOrderRefund(order, 'ORDER_CANCELLED');
-      order = await Order.findById(order._id);
     } catch (error) {
       console.error('Queued order refund provider attempt failed:', error);
+    } finally {
+      order = await Order.findById(order._id) || order;
     }
   }
   return { order, changed: true };
+}
+
+export async function cancelCustomerOrder(id, reason, customer) {
+  const result = await cancelOrder(id, { note: reason }, customer, { customerInitiated: true });
+  if (!result.changed) return result.order;
+  publishOrderChange({
+    action: 'order.status.updated', orderId: String(result.order._id), orderNumber: result.order.orderNumber,
+    customerId: String(result.order.customer), status: result.order.status,
+    paymentStatus: result.order.paymentStatus, total: result.order.total,
+  });
+  await sendOrderStatusNotification(result.order);
+  return result.order;
 }
 
 export async function updateOrderStatus(id, payload, actor) {

@@ -18,6 +18,11 @@ import {
   paymentDeliveryAddressSnapshot,
   validateProviderPayment,
 } from '../src/modules/payments/payment.service.js';
+import {
+  assertOnlinePaymentAllowed,
+  isPaanCornerItem,
+  paymentPolicyForItems,
+} from '../src/modules/payments/payment-policy.js';
 import { createRazorpayOrderSchema } from '../src/modules/payments/payment.validation.js';
 import { WEBHOOK_PROCESSING_LEASE_MS, recordAndProcess } from '../src/modules/payments/razorpay.webhook.js';
 
@@ -65,6 +70,28 @@ test('provider verification is bound to the exact callback payment ID', () => {
   assert.throws(() => validateProviderPayment(payment, intent, 'pay_callback_other'), { code: 'PAYMENT_PROVIDER_MISMATCH' });
 });
 
+test('Paan Corner payment policy detects canonical references and legacy category names', () => {
+  assert.equal(isPaanCornerItem({ product: { categoryRef: { slug: 'paan-corner' }, category: 'Renamed display label' } }), true);
+  assert.equal(isPaanCornerItem({ category: 'Paan Corner' }), true);
+  assert.equal(isPaanCornerItem({ categorySlug: 'pan-corner' }), true);
+
+  const restricted = paymentPolicyForItems([
+    { category: 'Biscuits & Cookies' },
+    { categoryRef: { name: 'Paan Corner', slug: 'paan-corner' } },
+  ]);
+  assert.deepEqual(restricted.allowedPaymentMethods, ['cod']);
+  assert.equal(restricted.onlinePaymentAvailable, false);
+  assert.equal(restricted.reasonCode, 'PAAN_CORNER_COD_ONLY');
+  assert.throws(() => assertOnlinePaymentAllowed([{ category: 'Paan Corner' }]), {
+    code: 'PAYMENT_METHOD_NOT_ALLOWED',
+    statusCode: 422,
+  });
+
+  const unrestricted = paymentPolicyForItems([{ category: 'Biscuits & Cookies' }]);
+  assert.deepEqual(unrestricted.allowedPaymentMethods, ['razorpay', 'cod']);
+  assert.equal(unrestricted.onlinePaymentAvailable, true);
+});
+
 test('paid delivery address is immutable, whitelisted, and required', () => {
   const saved = {
     _id: ids.address,
@@ -104,6 +131,41 @@ test('active-session limit runs before any catalog or inventory read', async () 
   assert.equal(productRead, false);
 });
 
+test('Razorpay checkout creation rejects a server-hydrated Paan Corner cart before reservations', async () => {
+  const paanProduct = {
+    _id: ids.product,
+    name: 'Classic Cigarettes',
+    category: 'Paan Corner',
+    categoryRef: { slug: 'paan-corner', name: 'Paan Corner' },
+    variants: [],
+    stock: 10,
+    reservedStock: 0,
+    price: 320,
+    mrp: 340,
+    taxRate: 0,
+    sku: 'PAAN-ITC-CLASSIC-20',
+    unit: '20 cigarettes',
+    image: '',
+  };
+  let transactionStarted = false;
+  await withStubs([
+    { object: PaymentIntent, method: 'findOne', implementation: async () => null },
+    { object: PaymentIntent, method: 'countDocuments', implementation: async () => 0 },
+    { object: Product, method: 'find', implementation: () => queryResult([paanProduct]) },
+    { object: mongoose, method: 'startSession', implementation: async () => { transactionStarted = true; throw new Error('must not reserve inventory'); } },
+  ], async () => {
+    await assert.rejects(
+      () => createRazorpayCheckoutSession(
+        { items: [{ productId: ids.product, quantity: 1 }], addressId: ids.address, slotId: ids.slot },
+        { _id: 'customer-1' },
+        'paan-checkout-key-123456',
+      ),
+      { code: 'PAYMENT_METHOD_NOT_ALLOWED', statusCode: 422 },
+    );
+  });
+  assert.equal(transactionStarted, false);
+});
+
 test('customer payment-session reads always scope by internal ID and authenticated owner', async () => {
   let lookup;
   const intent = { _id: ids.session, user: 'customer-1', amount: 100, amountPaise: 10000, currency: 'INR', status: 'created', reservation: {} };
@@ -122,6 +184,25 @@ test('verified sessions fail closed when immutable fulfillment data is incomplet
     { object: PaymentIntent, method: 'findOne', implementation: () => queryResult(intent) },
   ], async () => {
     await assert.rejects(() => getVerifiedPaymentIntentForOrder(ids.session, { _id: 'customer-1' }), { code: 'PAYMENT_SNAPSHOT_MISSING' });
+  });
+});
+
+test('verified Paan Corner sessions cannot be consumed into an online order', async () => {
+  const intent = {
+    checkoutSnapshot: {
+      items: [{ productId: ids.product, categorySlug: 'paan-corner', quantity: 1 }],
+      totals: { total: 320 },
+      deliveryAddress: { line1: 'Paid address' },
+      deliverySlot: { slotId: ids.slot, startsAt: '10:00', endsAt: '12:00' },
+    },
+  };
+  await withStubs([
+    { object: PaymentIntent, method: 'findOne', implementation: () => queryResult(intent) },
+  ], async () => {
+    await assert.rejects(
+      () => getVerifiedPaymentIntentForOrder(ids.session, { _id: 'customer-1' }),
+      { code: 'PAYMENT_METHOD_NOT_ALLOWED', statusCode: 422 },
+    );
   });
 });
 

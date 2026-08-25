@@ -4,9 +4,9 @@ import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { validate } from '../../shared/validation/validate.js';
 import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { audit } from '../audit/audit.service.js';
-import { deliveryOtpRateLimiter } from '../../shared/middlewares/rateLimiters.js';
-import { createOrderSchema, quoteOrderSchema, updateStatusSchema, verifyDeliveryOtpSchema } from './order.validation.js';
-import { createOrder, getOrderForCustomer, listCustomerOrders, quoteOrder, updateOrderStatus, verifyDeliveryOtp } from './order.service.js';
+import { customerOrderActionRateLimiter, deliveryOtpRateLimiter } from '../../shared/middlewares/rateLimiters.js';
+import { createOrderSchema, customerCancelOrderSchema, quoteOrderSchema, updateStatusSchema, verifyDeliveryOtpSchema } from './order.validation.js';
+import { cancelCustomerOrder, createOrder, getOrderForCustomer, listCustomerOrders, quoteOrder, updateOrderStatus, verifyDeliveryOtp } from './order.service.js';
 import { streamInvoicePdf } from './invoice.service.js';
 import { Order } from './order.model.js';
 
@@ -22,9 +22,16 @@ orderRoutes.post('/', authorize('customer'), validate(createOrderSchema), asyncH
   created(res, await createOrder(req.user, req.body), 'Order placed');
 }));
 
+orderRoutes.post('/:id/cancel', authorize('customer'), customerOrderActionRateLimiter, validate(customerCancelOrderSchema), asyncHandler(async (req, res) => {
+  const order = await cancelCustomerOrder(req.params.id, req.body.reason, req.user);
+  ok(res, { order }, 'Order cancelled');
+}));
+
 orderRoutes.post('/admin/:id/verify-delivery-otp', authorize('admin', 'manager', 'support'), deliveryOtpRateLimiter, validate(verifyDeliveryOtpSchema), asyncHandler(async (req, res) => {
   const before = await Order.findById(req.params.id);
-  const order = await verifyDeliveryOtp(req.params.id, req.body.otp, req.user);
+  const order = await verifyDeliveryOtp(req.params.id, req.body.otp, req.user, {
+    restrictedProductChecksConfirmed: req.body.restrictedProductChecksConfirmed,
+  });
   await audit({ req, action: 'order.delivery.verify', entityType: 'Order', entityId: order._id, before, after: order });
   ok(res, { order }, 'Delivery verified');
 }));
