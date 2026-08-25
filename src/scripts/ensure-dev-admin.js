@@ -21,7 +21,7 @@ try {
   }
 
   const administrator = existing || new User({ email: DEVELOPMENT_ADMIN_EMAIL });
-  administrator.name = 'Development Admin';
+  administrator.name = 'Admin';
   administrator.passwordHash = await User.hashPassword(DEVELOPMENT_ADMIN_PASSWORD);
   administrator.role = 'admin';
   administrator.status = 'active';

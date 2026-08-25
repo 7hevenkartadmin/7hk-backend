@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { generateSku } from './catalog.sku.js';
 
 const barcodeSchema = new mongoose.Schema({
   value: { type: String, trim: true },
@@ -62,6 +63,7 @@ const productSchema = new mongoose.Schema({
 
 productSchema.pre('validate', function syncDefaultVariant() {
   if (!this.variants?.length) {
+    if (!this.sku) this.sku = generateSku();
     this.variants = [{
       title: this.unit || 'Default',
       unit: this.unit,
@@ -75,6 +77,15 @@ productSchema.pre('validate', function syncDefaultVariant() {
       isDefault: true,
       isActive: this.isActive !== false,
     }];
+  } else {
+    const used = new Set(this.variants.map((variant) => String(variant.sku || '').trim().toUpperCase()).filter(Boolean));
+    for (const variant of this.variants) {
+      if (variant.sku) continue;
+      let sku = generateSku();
+      while (used.has(sku)) sku = generateSku();
+      variant.sku = sku;
+      used.add(sku);
+    }
   }
   const selected = this.variants.find((variant) => variant.isDefault && variant.isActive)
     || this.variants.find((variant) => variant.isActive)
@@ -104,6 +115,11 @@ productSchema.path('reservedStock').validate(function reservedDoesNotExceedStock
 productSchema.path('price').validate(function priceDoesNotExceedMrp(value) {
   return value <= this.mrp;
 }, 'Price cannot exceed MRP');
+
+productSchema.path('variants').validate((variants) => {
+  const skus = (variants || []).map((variant) => String(variant.sku || '').trim().toUpperCase()).filter(Boolean);
+  return skus.length === new Set(skus).size;
+}, 'Every product variant must have a unique SKU');
 
 productSchema.index({ name: 'text', description: 'text', brand: 'text', sku: 'text', 'barcode.value': 'text', tags: 'text' });
 productSchema.index({ categoryRef: 1, subcategoryRef: 1, isActive: 1 });

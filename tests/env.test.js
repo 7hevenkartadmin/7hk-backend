@@ -10,7 +10,7 @@ test('register schema enforces strong enough customer password', () => {
   assert.equal(weak.success, false);
 });
 
-test('product schema accepts barcode information supplied by client', () => {
+test('product schema accepts barcode information but strips client-controlled SKU', () => {
   const parsed = productSchema.safeParse({
     name: 'Test Rice',
     category: 'grains',
@@ -22,6 +22,7 @@ test('product schema accepts barcode information supplied by client', () => {
   });
   assert.equal(parsed.success, true);
   assert.equal(parsed.data.barcode.format, 'EAN-13');
+  assert.equal(Object.hasOwn(parsed.data, 'sku'), false);
 });
 
 test('online order schema requires Razorpay payment proof', () => {

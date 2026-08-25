@@ -31,7 +31,6 @@ const variantSchema = z.object({
   _id: z.string().regex(/^[0-9a-fA-F]{24}$/).optional(),
   title: z.string().min(1).max(80),
   unit: z.string().min(1).max(40),
-  sku: z.string().min(2).max(60),
   barcode: barcodeSchema.optional(),
   mrp: z.number().min(0),
   price: z.number().min(0),
@@ -55,7 +54,6 @@ export const productSchema = z.object({
   discount: z.number().min(0).max(100).default(0),
   unit: z.string().min(1).max(40),
   stock: z.number().int().min(0).default(0),
-  sku: z.string().min(2).max(60),
   barcode: z.object({
     value: z.string().max(80).optional(),
     format: z.string().max(40).default('EAN-13'),

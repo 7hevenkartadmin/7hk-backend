@@ -13,7 +13,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { auditLogsQuerySchema, adminOrdersQuerySchema, dashboardStatsQuerySchema } from './admin.validation.js';
 import { buildInventoryDashboardPipeline, getDashboardStats, listAdminOrders } from './admin.service.js';
 import { parseStoreDate, todayStoreRange } from '../../shared/utils/storeDate.js';
-import { criticalAuditType } from '../audit/criticalAudit.js';
+import { criticalAuditMongoFilter, criticalAuditType } from '../audit/criticalAudit.js';
 
 export const adminRoutes = Router();
 
@@ -70,7 +70,7 @@ function serializeAuditLog(item) {
 }
 
 adminRoutes.get('/audit-logs', validate(auditLogsQuerySchema, 'query'), asyncHandler(async (req, res) => {
-  const { page, limit, action, entityType, actorRole, from, to, search } = req.query;
+  const { page, limit, action, entityType, actorRole, from, to, search, criticalFilter: mainCriticalFilter, criticalType, criticalPage, criticalLimit } = req.query;
   const filter = {};
   if (action) filter.action = action;
   if (entityType) filter.entityType = entityType;
@@ -84,10 +84,16 @@ adminRoutes.get('/audit-logs', validate(auditLogsQuerySchema, 'query'), asyncHan
     const pattern = new RegExp(`^${escapeRegex(search)}`, 'i');
     filter.$or = [{ action: pattern }, { entityType: pattern }, { entityId: pattern }];
   }
+  if (mainCriticalFilter) filter.$and = [criticalAuditMongoFilter(mainCriticalFilter)];
 
   const skip = (page - 1) * limit;
+  const criticalSkip = (criticalPage - 1) * criticalLimit;
+  const criticalFilter = criticalAuditMongoFilter(criticalType);
   const today = todayStoreRange();
-  const [items, total, todayCount, actions, entityTypes, couponEvents, productEvents, settingsEvents] = await Promise.all([
+  const [
+    items, total, todayCount, actions, entityTypes, criticalEvents, criticalTotal,
+    productPriceCount, couponCreationCount, deliveryChargeCount,
+  ] = await Promise.all([
     AuditLog.find(filter)
       .populate('actor', 'name email role')
       .sort({ createdAt: -1, _id: -1 })
@@ -98,21 +104,32 @@ adminRoutes.get('/audit-logs', validate(auditLogsQuerySchema, 'query'), asyncHan
     AuditLog.countDocuments({ createdAt: { $gte: today.start, $lt: today.end } }),
     AuditLog.distinct('action'),
     AuditLog.distinct('entityType'),
-    AuditLog.find({ action: 'coupon.create' }).populate('actor', 'name email role').sort({ createdAt: -1, _id: -1 }).limit(10).lean(),
-    AuditLog.find({ action: 'product.update' }).populate('actor', 'name email role').sort({ createdAt: -1, _id: -1 }).limit(100).lean(),
-    AuditLog.find({ action: 'settings.update' }).populate('actor', 'name email role').sort({ createdAt: -1, _id: -1 }).limit(100).lean(),
+    AuditLog.find(criticalFilter).populate('actor', 'name email role').sort({ createdAt: -1, _id: -1 }).skip(criticalSkip).limit(criticalLimit).lean(),
+    AuditLog.countDocuments(criticalFilter),
+    AuditLog.countDocuments(criticalAuditMongoFilter('product_price')),
+    AuditLog.countDocuments(criticalAuditMongoFilter('coupon_creation')),
+    AuditLog.countDocuments(criticalAuditMongoFilter('delivery_charge')),
   ]);
 
-  const criticalChanges = [...couponEvents, ...productEvents, ...settingsEvents]
-    .map((item) => ({ ...item, criticalType: criticalAuditType(item) }))
-    .filter((item) => item.criticalType)
-    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
-    .slice(0, 6)
-    .map(serializeAuditLog);
+  const criticalChanges = criticalEvents
+    .map((item) => serializeAuditLog({ ...item, criticalType: criticalAuditType(item) }))
+    .filter((item) => item.criticalType);
 
   ok(res, {
     items: items.map((item) => serializeAuditLog({ ...item, criticalType: criticalAuditType(item) })),
     criticalChanges,
+    criticalMeta: {
+      total: criticalTotal,
+      page: criticalPage,
+      limit: criticalLimit,
+      pages: Math.max(1, Math.ceil(criticalTotal / criticalLimit)),
+    },
+    criticalCounts: {
+      all: productPriceCount + couponCreationCount + deliveryChargeCount,
+      product_price: productPriceCount,
+      coupon_creation: couponCreationCount,
+      delivery_charge: deliveryChargeCount,
+    },
     meta: { total, page, limit, pages: Math.max(1, Math.ceil(total / limit)) },
     summary: { today: todayCount },
     filters: { actions: actions.sort(), entityTypes: entityTypes.sort() },

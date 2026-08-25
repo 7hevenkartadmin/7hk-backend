@@ -6,6 +6,9 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { publishInventoryChange } from '../../shared/realtime/inventory.events.js';
 import { env } from '../../config/env.js';
 import { maxOrderableQuantity, netAvailableStock } from '../../shared/utils/inventory.js';
+import { isSkuDuplicateKeyError, prepareNewProductSkus, prepareProductUpdateSkus } from './catalog.sku.js';
+
+const SKU_WRITE_ATTEMPTS = 5;
 
 const sortMap = {
   popularity: { popularity: -1, createdAt: -1 },
@@ -337,37 +340,53 @@ export async function getProductById(idOrSlug) {
 export async function createProduct(payload) {
   const slug = slugify(payload.name, { lower: true, strict: true });
   const normalized = await resolveCategoryHierarchy(payload);
-  const product = await Product.create({ ...normalized, slug });
-  publishInventoryChange({ action: 'product.created', productId: String(product._id), stock: product.stock, isActive: product.isActive });
-  return product.populate('categoryRef subcategoryRef', 'name slug parent');
+  for (let attempt = 0; attempt < SKU_WRITE_ATTEMPTS; attempt += 1) {
+    const productPayload = prepareNewProductSkus(normalized);
+    try {
+      const product = await Product.create({ ...productPayload, slug });
+      publishInventoryChange({ action: 'product.created', productId: String(product._id), stock: product.stock, isActive: product.isActive });
+      return product.populate('categoryRef subcategoryRef', 'name slug parent');
+    } catch (error) {
+      if (!isSkuDuplicateKeyError(error)) throw error;
+    }
+  }
+  throw new AppError('Could not allocate a unique SKU. Please try again.', 503, 'SKU_GENERATION_FAILED');
 }
 
 export async function updateProduct(id, payload) {
-  const product = await Product.findById(id);
-  if (!product) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
-  const update = await resolveCategoryHierarchy(payload, product);
-  if (update.name) update.slug = slugify(update.name, { lower: true, strict: true });
+  for (let attempt = 0; attempt < SKU_WRITE_ATTEMPTS; attempt += 1) {
+    const product = await Product.findById(id);
+    if (!product) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+    const resolved = await resolveCategoryHierarchy(payload, product);
+    const update = prepareProductUpdateSkus(resolved, product.variants);
+    if (update.name) update.slug = slugify(update.name, { lower: true, strict: true });
 
-  const variantsWereReplaced = Object.hasOwn(update, 'variants');
-  if (variantsWereReplaced && product.variants?.length) {
-    const incomingIds = new Set(update.variants.map((variant) => String(variant._id || '')).filter(Boolean));
-    const retiredVariants = product.variants
-      .filter((variant) => !incomingIds.has(String(variant._id)))
-      .map((variant) => ({ ...variant.toObject(), isDefault: false, isActive: false }));
-    update.variants = [...update.variants, ...retiredVariants];
-  }
-  if (!variantsWereReplaced && product.variants?.length) {
-    const selected = product.variants[defaultVariantIndex(product.variants)];
-    const mirroredFields = ['sku', 'unit', 'mrp', 'price', 'stock', 'reservedStock', 'barcode'];
-    for (const field of mirroredFields) {
-      selected[field] = Object.hasOwn(update, field) ? update[field] : product[field];
+    const variantsWereReplaced = Object.hasOwn(update, 'variants');
+    if (variantsWereReplaced && product.variants?.length) {
+      const incomingIds = new Set(update.variants.map((variant) => String(variant._id || '')).filter(Boolean));
+      const retiredVariants = product.variants
+        .filter((variant) => !incomingIds.has(String(variant._id)))
+        .map((variant) => ({ ...variant.toObject(), isDefault: false, isActive: false }));
+      update.variants = [...update.variants, ...retiredVariants];
+    }
+    if (!variantsWereReplaced && product.variants?.length) {
+      const selected = product.variants[defaultVariantIndex(product.variants)];
+      const mirroredFields = ['unit', 'mrp', 'price', 'stock', 'reservedStock', 'barcode'];
+      for (const field of mirroredFields) {
+        selected[field] = Object.hasOwn(update, field) ? update[field] : product[field];
+      }
+    }
+
+    product.set(update);
+    try {
+      await product.save();
+      publishInventoryChange({ action: 'product.updated', productId: String(product._id), stock: product.stock, isActive: product.isActive });
+      return product.populate('categoryRef subcategoryRef', 'name slug parent');
+    } catch (error) {
+      if (!isSkuDuplicateKeyError(error)) throw error;
     }
   }
-
-  product.set(update);
-  await product.save();
-  publishInventoryChange({ action: 'product.updated', productId: String(product._id), stock: product.stock, isActive: product.isActive });
-  return product.populate('categoryRef subcategoryRef', 'name slug parent');
+  throw new AppError('Could not allocate a unique SKU. Please try again.', 503, 'SKU_GENERATION_FAILED');
 }
 
 export async function deleteProduct(id) {

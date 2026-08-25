@@ -98,6 +98,10 @@ const REQUIRED_PRODUCTION_INDEXES = [
     name: 'support_ticket_status_created',
     unique: false,
   }],
+  ['auditlogs', { criticalType: 1, createdAt: -1 }, {
+    name: 'audit_critical_type_created',
+    unique: false,
+  }],
 ];
 
 const USER_PHONE_INDEX_NAME = 'user_phone_unique_when_present';

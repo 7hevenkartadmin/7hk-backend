@@ -6,6 +6,7 @@ const auditLogSchema = new mongoose.Schema({
   action: { type: String, required: true, index: true },
   entityType: { type: String, required: true, index: true },
   entityId: { type: String, required: true, index: true },
+  criticalType: { type: String, enum: ['product_price', 'coupon_creation', 'delivery_charge'], index: true },
   before: mongoose.Schema.Types.Mixed,
   after: mongoose.Schema.Types.Mixed,
   ip: String,
@@ -15,5 +16,6 @@ const auditLogSchema = new mongoose.Schema({
 auditLogSchema.index({ createdAt: -1, _id: -1 });
 auditLogSchema.index({ action: 1, createdAt: -1 });
 auditLogSchema.index({ entityType: 1, createdAt: -1 });
+auditLogSchema.index({ criticalType: 1, createdAt: -1 });
 
 export const AuditLog = mongoose.model('AuditLog', auditLogSchema);
