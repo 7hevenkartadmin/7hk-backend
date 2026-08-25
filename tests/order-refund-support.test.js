@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
-import { canCustomerCancelOrder } from '../src/modules/orders/order.service.js';
+import {
+  canCustomerCancelOrder,
+  customerPrepaidCancellationBreakdown,
+} from '../src/modules/orders/order.service.js';
 import { customerCancelOrderSchema } from '../src/modules/orders/order.validation.js';
 import { Order } from '../src/modules/orders/order.model.js';
 import { User } from '../src/modules/users/user.model.js';
@@ -34,6 +37,20 @@ test('customer cancellation closes strictly when packing begins', () => {
   assert.equal(customerCancelOrderSchema.safeParse({ reason: 'Valid reason', status: 'cancelled' }).success, false);
 });
 
+test('customer prepaid cancellation retains exactly 10 percent in paise', () => {
+  assert.deepEqual(customerPrepaidCancellationBreakdown(303), {
+    grossPaidPaise: 30300,
+    cancellationFeePaise: 3030,
+    refundAmountPaise: 27270,
+    grossPaidAmount: 303,
+    cancellationFeeAmount: 30.3,
+    refundAmount: 272.7,
+  });
+  const rounded = customerPrepaidCancellationBreakdown(303.01);
+  assert.equal(rounded.cancellationFeePaise, 3030);
+  assert.equal(rounded.refundAmountPaise, 27271);
+});
+
 test('support proof is mandatory for damaged and expired claims only', () => {
   const base = {
     orderId: new mongoose.Types.ObjectId().toString(),
@@ -51,6 +68,11 @@ test('refund, customer-risk and support-ticket persistence fields remain typed',
   for (const status of ['refund_pending', 'refund_failed', 'partially_refunded', 'refunded', 'cod_refund_approved']) {
     assert.equal(paymentStatuses.includes(status), true);
   }
+  assert.ok(Order.schema.path('refund.grossPaidAmount'));
+  assert.ok(Order.schema.path('refund.cancellationFeeRate'));
+  assert.ok(Order.schema.path('refund.cancellationFeeAmount'));
+  assert.ok(Order.schema.path('refund.initiatedBy'));
+  assert.ok(PaymentIntent.schema.path('refundTargetPaise'));
   assert.equal(User.schema.path('rejectedTicketsCount').defaultValue, 0);
   assert.equal(User.schema.path('isCodDisabled').defaultValue, false);
   assert.ok(SupportTicket.schema.path('providerRefundId'));

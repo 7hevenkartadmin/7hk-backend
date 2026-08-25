@@ -1,6 +1,7 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import { Coupon } from './coupon.model.js';
 import { CouponRedemption } from './couponRedemption.model.js';
+import { combineMongoFilters, paanCornerTextExclusion } from '../catalog/paanCorner.visibility.js';
 
 const occupiedCouponCountExpression = {
   $add: [
@@ -68,10 +69,13 @@ export function calculateDiscount(coupon, subtotal) {
   return Math.min(subtotal, Math.max(0, Number(capped.toFixed(2))));
 }
 
-export async function validateCoupon(code, subtotal, userId, session) {
+export async function validateCoupon(code, subtotal, userId, session, { excludePaanCorner = false } = {}) {
   if (!code) return { coupon: null, discount: 0 };
   const now = new Date();
-  const couponQuery = Coupon.findOne({ code: String(code).trim().toUpperCase(), isActive: true });
+  const couponQuery = Coupon.findOne(combineMongoFilters(
+    { code: String(code).trim().toUpperCase(), isActive: true },
+    excludePaanCorner ? paanCornerTextExclusion(['code', 'description', 'image']) : null,
+  ));
   const coupon = await applySession(couponQuery, session);
   if (!coupon) throw new AppError('Invalid coupon', 404, 'COUPON_NOT_FOUND');
   if (coupon.startsAt > now || coupon.endsAt < now) throw new AppError('Coupon is not active', 400, 'COUPON_INACTIVE');
@@ -125,12 +129,12 @@ export async function updateCoupon(id, payload) {
   return withUsagePolicy(coupon, await redemptionStatsForCoupon(coupon._id));
 }
 
-export async function listActiveCouponOffers(userId) {
+export async function listActiveCouponOffers(userId, { excludePaanCorner = false } = {}) {
   const now = new Date();
   const unavailableCouponIds = userId
     ? await CouponRedemption.distinct('coupon', { user: userId, active: true })
     : [];
-  const coupons = await Coupon.find({
+  const coupons = await Coupon.find(combineMongoFilters({
     isActive: true,
     startsAt: { $lte: now },
     endsAt: { $gte: now },
@@ -139,7 +143,8 @@ export async function listActiveCouponOffers(userId) {
       { usageLimit: 0 },
       { $expr: { $lt: [occupiedCouponCountExpression, '$usageLimit'] } },
     ],
-  }).sort({ value: -1, createdAt: -1 }).limit(20);
+  }, excludePaanCorner ? paanCornerTextExclusion(['code', 'description', 'image']) : null))
+    .sort({ value: -1, createdAt: -1 }).limit(20);
   return coupons.map((coupon) => withUsagePolicy(coupon));
 }
 

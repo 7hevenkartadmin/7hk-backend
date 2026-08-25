@@ -238,6 +238,8 @@ test('expired captured reservation becomes a durable released refund job instead
   assert.equal(releaseFilter.status.$in.includes('verified'), true);
   assert.equal(intent.status, 'refund_pending');
   assert.equal(intent.refundReason, 'RESERVATION_EXPIRED');
+  assert.equal(intent.refundTargetPaise, 10000);
+  assert.equal(intent.refundAmountPaise, 10000);
   assert.equal(intent.reservation.state, 'released');
   assert.equal(intent.activeDedupeKey, undefined);
   assert.ok(intent.refundReceipt.startsWith('rf_'));
@@ -369,7 +371,13 @@ test('processed refund id is counted once even when delivered under different we
     status: 'captured',
     order: new mongoose.Types.ObjectId(),
   };
-  const intent = { _id: new mongoose.Types.ObjectId(), status: 'consumed' };
+  const intent = {
+    _id: new mongoose.Types.ObjectId(),
+    status: 'refund_pending',
+    amountPaise: 10000,
+    refundTargetPaise: 4000,
+    refundAmountPaise: 4000,
+  };
   const orderUpdates = [];
   let intentUpdate;
 
@@ -386,7 +394,10 @@ test('processed refund id is counted once even when delivered under different we
     { object: Payment, method: 'findOne', implementation: async () => payment },
     { object: Order, method: 'updateOne', implementation: async (filter, update) => { orderUpdates.push({ filter, update }); } },
     { object: PaymentIntent, method: 'findOne', implementation: async () => intent },
-    { object: PaymentIntent, method: 'updateOne', implementation: async (filter, update) => { intentUpdate = { filter, update }; } },
+    { object: PaymentIntent, method: 'updateOne', implementation: async (filter, update) => {
+      intentUpdate = { filter, update };
+      Object.assign(intent, update.$set || {});
+    } },
   ], async () => {
     const refund = { id: 'rf_processed', payment_id: 'pay_refunded', amount: 4000, status: 'processed' };
     await applyRefund(refund);
@@ -399,6 +410,8 @@ test('processed refund id is counted once even when delivered under different we
   assert.equal(orderUpdates.every(({ update }) => update.$set.paymentStatus === 'partially_refunded'), true);
   assert.deepEqual(orderUpdates[0].filter.paymentStatus.$in, ['pending', 'paid']);
   assert.equal(intentUpdate.update.$set.providerStatus, 'partially_refunded');
+  assert.equal(intent.status, 'refunded');
+  assert.equal(intent.refundAmountPaise, 0);
 });
 
 test('late capture webhook uses monotonic Payment and Order filters', async () => {
@@ -441,7 +454,7 @@ test('late capture webhook uses monotonic Payment and Order filters', async () =
   assert.deepEqual(orderFilter.status, { $ne: 'cancelled' });
 });
 
-test('order cancellation restores fulfilment resources but keeps coupon eligibility permanently consumed', async () => {
+test('customer prepaid cancellation restores fulfilment resources and queues only the 90 percent refund', async () => {
   const { DeliverySlot } = await import('../src/modules/delivery/deliverySlot.model.js');
   const { cancelOrder } = await import('../src/modules/orders/order.service.js');
   const { Order } = await import('../src/modules/orders/order.model.js');
@@ -464,7 +477,7 @@ test('order cancellation restores fulfilment resources but keeps coupon eligibil
   const order = {
     _id: orderId,
     orderNumber: 'ORD-CANCEL-ONCE',
-    customer: new mongoose.Types.ObjectId(),
+    customer: actor._id,
     items: [],
     slot: { slotId },
     status: 'placed',
@@ -499,8 +512,8 @@ test('order cancellation restores fulfilment resources but keeps coupon eligibil
     { object: PaymentIntent, method: 'findOneAndUpdate', implementation: async () => null },
     { object: PaymentIntent, method: 'findById', implementation: async () => intent },
   ], async () => {
-    const first = await cancelOrder(orderId, { note: 'Customer request' }, actor);
-    const second = await cancelOrder(orderId, { note: 'Duplicate request' }, actor);
+    const first = await cancelOrder(orderId, { note: 'Customer request' }, actor, { customerInitiated: true });
+    const second = await cancelOrder(orderId, { note: 'Duplicate request' }, actor, { customerInitiated: true });
     assert.equal(first.changed, true);
     assert.equal(second.changed, false);
   });
@@ -511,6 +524,13 @@ test('order cancellation restores fulfilment resources but keeps coupon eligibil
   assert.ok(order.inventoryRestoredAt instanceof Date);
   assert.equal(order.statusTimeline.length, 1);
   assert.equal(intent.status, 'refund_pending');
-  assert.equal(intent.refundReason, 'ORDER_CANCELLED');
+  assert.equal(intent.refundReason, 'CUSTOMER_CANCELLED_BEFORE_PACKED');
+  assert.equal(intent.refundTargetPaise, 9000);
+  assert.equal(intent.refundAmountPaise, 9000);
+  assert.equal(order.refund.grossPaidAmount, 100);
+  assert.equal(order.refund.cancellationFeeRate, 10);
+  assert.equal(order.refund.cancellationFeeAmount, 10);
+  assert.equal(order.refund.amount, 90);
+  assert.equal(order.refund.initiatedBy, 'customer');
   assert.equal(intent.reservation.state, 'consumed');
 });

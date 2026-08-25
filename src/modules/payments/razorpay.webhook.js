@@ -48,7 +48,17 @@ export async function processWebhook(payload) {
         status: 'cancelled',
         paymentStatus: { $ne: 'refunded' },
       });
-      if (cancelledOrder) await initiateOrderRefund(cancelledOrder, 'LATE_CAPTURE_CANCELLED');
+      if (cancelledOrder) {
+        const customerCancellation = cancelledOrder.refund?.initiatedBy === 'customer';
+        const maxTotalRefundPaise = customerCancellation
+          ? Math.max(0, Math.round(Number(cancelledOrder.refund?.amount || 0) * 100))
+          : undefined;
+        await initiateOrderRefund(
+          cancelledOrder,
+          customerCancellation ? 'CUSTOMER_CANCELLED_BEFORE_PACKED' : 'LATE_CAPTURE_CANCELLED',
+          { maxTotalRefundPaise },
+        );
+      }
     }
     return Boolean(intent);
   }

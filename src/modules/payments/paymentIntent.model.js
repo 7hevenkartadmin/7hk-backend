@@ -50,6 +50,7 @@ const paymentIntentSchema = new mongoose.Schema({
   refundRequestedAt: Date,
   refundReason: String,
   refundAmountPaise: { type: Number, min: 0 },
+  refundTargetPaise: { type: Number, min: 0 },
   refundReceipt: String,
   refundAttemptCount: { type: Number, min: 0, default: 0 },
   nextRefundAttemptAt: Date,

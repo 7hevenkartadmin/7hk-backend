@@ -60,6 +60,9 @@ const envSchema = z.object({
   STORE_LATITUDE: z.coerce.number().default(26.713052497465416),
   STORE_LONGITUDE: z.coerce.number().default(85.68640273918543),
   DELIVERY_RADIUS_KM: z.coerce.number().positive().default(10),
+  ANDROID_APP_CHECK_MODE: z.enum(['off', 'monitor', 'enforce']).default('monitor'),
+  FIREBASE_PROJECT_ID: z.string().trim().regex(/^[a-z][a-z0-9-]{4,29}$/).or(z.literal('')).default(''),
+  FIREBASE_ANDROID_APP_ID: z.string().trim().regex(/^1:\d+:android:[a-fA-F0-9]+$/).or(z.literal('')).default(''),
 }).superRefine((data, ctx) => {
   const isPlaceholder = (value) => String(value || '').trim().toLowerCase().startsWith('replace-with');
   const issue = (field, message) => ctx.addIssue({
@@ -111,6 +114,9 @@ const envSchema = z.object({
     }
     if (data.WHATSAPP_PROVIDER !== 'meta') issue('WHATSAPP_PROVIDER', 'must be meta in production');
     if (!data.OTP_WORKER_ENABLED) issue('OTP_WORKER_ENABLED', 'must be true in production');
+    if (data.ANDROID_APP_CHECK_MODE !== 'enforce') {
+      issue('ANDROID_APP_CHECK_MODE', 'must be enforce in production');
+    }
     [
       ['CLOUDINARY_CLOUD_NAME', data.CLOUDINARY_CLOUD_NAME],
       ['CLOUDINARY_API_KEY', data.CLOUDINARY_API_KEY],
@@ -137,6 +143,15 @@ const envSchema = z.object({
         issue(field, 'has an invalid format');
       }
     });
+  }
+
+  if (data.ANDROID_APP_CHECK_MODE === 'enforce') {
+    if (!data.FIREBASE_PROJECT_ID || isPlaceholder(data.FIREBASE_PROJECT_ID)) {
+      issue('FIREBASE_PROJECT_ID', 'is required when Android App Check is enforced');
+    }
+    if (!data.FIREBASE_ANDROID_APP_ID || isPlaceholder(data.FIREBASE_ANDROID_APP_ID)) {
+      issue('FIREBASE_ANDROID_APP_ID', 'is required when Android App Check is enforced');
+    }
   }
 });
 

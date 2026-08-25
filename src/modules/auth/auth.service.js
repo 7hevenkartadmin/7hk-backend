@@ -27,11 +27,15 @@ function publicUser(user) {
   };
 }
 
-function tokenPayload(user, refreshToken) {
+function normalizeClientPlatform(value) {
+  return value === 'android' ? 'android' : 'web';
+}
+
+function tokenPayload(user, refreshToken, clientPlatform = 'web') {
   return {
     user: publicUser(user),
     tokens: {
-      accessToken: signAccessToken(user),
+      accessToken: signAccessToken(user, clientPlatform),
       refreshToken,
     },
   };
@@ -60,11 +64,16 @@ export function assertLoginCompletionReplayCurrent({ user, completion, tokens })
   return true;
 }
 
-function completedTokenPayload(user, completion) {
+function completedTokenPayload(user, completion, expectedClientPlatform = completion.clientPlatform) {
+  const completionPlatform = normalizeClientPlatform(completion.clientPlatform);
+  if (completionPlatform !== normalizeClientPlatform(expectedClientPlatform)) {
+    throw new AppError('Verified login belongs to a different client platform', 401, 'OTP_COMPLETION_CLIENT_MISMATCH');
+  }
   const tokens = replayLoginCompletionTokens({
     userId: completion.userId,
     role: completion.role,
     tokenVersion: completion.tokenVersion,
+    clientPlatform: completionPlatform,
     issuedAt: completion.issuedAt,
     accessExpiresAt: completion.accessExpiresAt,
     refreshExpiresAt: completion.refreshExpiresAt,
@@ -136,7 +145,7 @@ async function insertLoginCompletion(attributes, session) {
   return completion;
 }
 
-export async function registerCustomer(payload) {
+export async function registerCustomer(payload, clientPlatform = 'web') {
   let user;
   try {
     user = await User.create({
@@ -147,14 +156,15 @@ export async function registerCustomer(payload) {
     if (error?.code === 11000) throw new AppError('User already exists', 409, 'USER_EXISTS');
     throw error;
   }
-  const refreshToken = signRefreshToken(user);
+  const normalizedPlatform = normalizeClientPlatform(clientPlatform);
+  const refreshToken = signRefreshToken(user, normalizedPlatform);
   user.refreshTokenHash = hashToken(refreshToken);
   user.lastLoginAt = new Date();
   await user.save();
-  return tokenPayload(user, refreshToken);
+  return tokenPayload(user, refreshToken, normalizedPlatform);
 }
 
-export async function login(payload) {
+export async function login(payload, clientPlatform = 'web') {
   const user = await User.findOne({
     $or: [{ phone: payload.identifier }, { email: payload.identifier.toLowerCase() }],
   }).select('+passwordHash +refreshTokenHash +totpSecretEncrypted');
@@ -162,6 +172,10 @@ export async function login(payload) {
     throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
   }
   if (user.status !== 'active') throw new AppError('Account is blocked', 403, 'ACCOUNT_BLOCKED');
+  const normalizedPlatform = normalizeClientPlatform(clientPlatform);
+  if (normalizedPlatform === 'android' && user.role !== 'customer') {
+    throw new AppError('The Android app only supports customer accounts', 403, 'ANDROID_CUSTOMER_ONLY');
+  }
   if (user.role === 'admin' && (user.staffSeat !== 'PRIMARY_ADMIN' || !user.assignmentExpiresAt || user.assignmentExpiresAt <= new Date())) {
     throw new AppError('Administrator assignment is unavailable or expired', 403, 'ADMIN_ASSIGNMENT_EXPIRED');
   }
@@ -181,16 +195,20 @@ export async function login(payload) {
     }
     if (!valid) throw new AppError('Invalid owner authenticator code', 401, 'TOTP_INVALID');
   }
-  const refreshToken = signRefreshToken(user);
+  const refreshToken = signRefreshToken(user, normalizedPlatform);
   user.refreshTokenHash = hashToken(refreshToken);
   user.lastLoginAt = new Date();
   await user.save();
-  return tokenPayload(user, refreshToken);
+  return tokenPayload(user, refreshToken, normalizedPlatform);
 }
 
-export async function refreshSession(refreshToken) {
+export async function refreshSession(refreshToken, clientPlatform = 'web') {
   if (!refreshToken) throw new AppError('Refresh token required', 401, 'REFRESH_REQUIRED');
   const payload = verifyRefreshToken(refreshToken);
+  const normalizedPlatform = normalizeClientPlatform(clientPlatform);
+  if (normalizeClientPlatform(payload.clientPlatform) !== normalizedPlatform) {
+    throw new AppError('Refresh token belongs to a different client platform', 401, 'INVALID_REFRESH');
+  }
   const user = await User.findById(payload.sub).select('+refreshTokenHash');
   if (!user
     || payload.tokenVersion !== Number(user.tokenVersion || 0)
@@ -198,16 +216,19 @@ export async function refreshSession(refreshToken) {
     throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
   }
   if (user.status !== 'active') throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
+  if (normalizedPlatform === 'android' && user.role !== 'customer') {
+    throw new AppError('The Android app only supports customer accounts', 403, 'ANDROID_CUSTOMER_ONLY');
+  }
   if (user.role === 'admin' && (user.staffSeat !== 'PRIMARY_ADMIN' || !user.assignmentExpiresAt || user.assignmentExpiresAt <= new Date())) {
     throw new AppError('Administrator assignment is unavailable or expired', 403, 'ADMIN_ASSIGNMENT_EXPIRED');
   }
   if (user.role === 'owner' && user.staffSeat !== 'PRIMARY_OWNER') {
     throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
   }
-  const nextRefreshToken = signRefreshToken(user);
+  const nextRefreshToken = signRefreshToken(user, normalizedPlatform);
   user.refreshTokenHash = hashToken(nextRefreshToken);
   await user.save();
-  return tokenPayload(user, nextRefreshToken);
+  return tokenPayload(user, nextRefreshToken, normalizedPlatform);
 }
 
 export async function logout(userId) {
@@ -262,7 +283,7 @@ export async function resendOtp(phone, requestId) {
   return resendOtpWithDependencies(phone, requestId);
 }
 
-export async function completeVerifiedLoginWithDependencies({ normalizedPhone, name, proofId }, {
+export async function completeVerifiedLoginWithDependencies({ normalizedPhone, name, proofId, clientPlatform = 'web' }, {
   digestProof = digestLoginProof,
   findCompletion = findCompletedLogin,
   startSession = () => mongoose.startSession(),
@@ -279,9 +300,10 @@ export async function completeVerifiedLoginWithDependencies({ normalizedPhone, n
   replayCompletion = completedTokenPayload,
   transactionUnavailable = isTransactionUnavailable,
 } = {}) {
+  const normalizedPlatform = normalizeClientPlatform(clientPlatform);
   const proofDigest = digestProof(proofId);
   const existing = await findCompletion(proofDigest);
-  if (existing) return replayCompletion(existing.user, existing.completion);
+  if (existing) return replayCompletion(existing.user, existing.completion, normalizedPlatform);
 
   const issuedAt = new Date(Math.floor(now() / 1000) * 1000);
   const passwordHash = await hashPassword(`otp-${createPasswordSeed()}`);
@@ -313,6 +335,7 @@ export async function completeVerifiedLoginWithDependencies({ normalizedPhone, n
           proofDigest,
           user,
           issuedAt,
+          clientPlatform: normalizedPlatform,
         });
         updateUser(user, issuedAt);
         await persistRefreshSession(user, hashRefreshToken(tokens.refreshToken), session);
@@ -323,6 +346,7 @@ export async function completeVerifiedLoginWithDependencies({ normalizedPhone, n
           role: metadata.role,
           issuedAt: metadata.issuedAt,
           tokenVersion: metadata.tokenVersion,
+          clientPlatform: metadata.clientPlatform,
           accessJti: metadata.accessJti,
           refreshJti: metadata.refreshJti,
           accessExpiresAt: metadata.accessExpiresAt,
@@ -334,7 +358,7 @@ export async function completeVerifiedLoginWithDependencies({ normalizedPhone, n
       if (!durable) {
         throw new AppError('Login completion was not persisted', 503, 'OTP_COMPLETION_UNAVAILABLE');
       }
-      return replayCompletion(durable.user, durable.completion);
+      return replayCompletion(durable.user, durable.completion, normalizedPlatform);
     } catch (error) {
       lastError = error;
       if (transactionUnavailable(error)) {
@@ -346,7 +370,7 @@ export async function completeVerifiedLoginWithDependencies({ normalizedPhone, n
       }
 
       const winner = await findCompletion(proofDigest);
-      if (winner) return replayCompletion(winner.user, winner.completion);
+      if (winner) return replayCompletion(winner.user, winner.completion, normalizedPlatform);
       if (error?.code !== 11000 || attempt === 1) throw error;
     } finally {
       if (session) await session.endSession();
@@ -360,7 +384,7 @@ export async function completeVerifiedLogin(payload) {
   return completeVerifiedLoginWithDependencies(payload);
 }
 
-export async function verifyOtpWithDependencies({ phone, otp, name }, {
+export async function verifyOtpWithDependencies({ phone, otp, name, clientPlatform = 'web' }, {
   otpService,
   getOtpService = getSevenHeavenOtpService,
   completeLogin = completeVerifiedLogin,
@@ -382,7 +406,7 @@ export async function verifyOtpWithDependencies({ phone, otp, name }, {
 
   let result;
   try {
-    result = await completeLogin({ normalizedPhone, name, proofId: verification.proofId });
+    result = await completeLogin({ normalizedPhone, name, proofId: verification.proofId, clientPlatform });
   } catch (error) {
     if (error?.code === 'ACCOUNT_BLOCKED' || error?.code === 'OTP_COMPLETION_STALE') {
       let closed = false;

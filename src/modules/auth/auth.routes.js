@@ -15,6 +15,7 @@ import {
   authContextForRole,
   refreshCookieName,
 } from './auth.cookies.js';
+import { isAndroidRequest, requestClientPlatform } from '../../shared/middlewares/clientPlatform.js';
 
 export const authRoutes = Router();
 
@@ -43,14 +44,18 @@ export function attachCookies(res, tokens, currentTimeMs = Date.now(), role = 'c
   });
 }
 
-function sendSession(res, result, message, statusCode = 200) {
-  attachCookies(res, result.tokens, Date.now(), result.user.role);
-  return ok(res, { user: result.user }, message, statusCode);
+function sendSession(req, res, result, message, statusCode = 200) {
+  const android = isAndroidRequest(req);
+  if (!android) attachCookies(res, result.tokens, Date.now(), result.user.role);
+  return ok(res, {
+    user: result.user,
+    ...(android ? { tokens: result.tokens } : {}),
+  }, message, statusCode);
 }
 
 authRoutes.post('/register', authRateLimiter, validate(registerSchema), asyncHandler(async (req, res) => {
-  const result = await registerCustomer(req.body);
-  sendSession(res, result, 'Customer registered', 201);
+  const result = await registerCustomer(req.body, requestClientPlatform(req));
+  sendSession(req, res, result, 'Customer registered', 201);
 }));
 
 authRoutes.post('/otp/resend', otpRateLimiter, validate(requestOtpSchema), asyncHandler(async (req, res) => {
@@ -62,19 +67,24 @@ authRoutes.post('/otp/resend', otpRateLimiter, validate(requestOtpSchema), async
 }));
 
 authRoutes.post('/login', authRateLimiter, validate(loginSchema), asyncHandler(async (req, res) => {
-  const result = await login(req.body);
-  sendSession(res, result, 'Logged in');
+  const result = await login(req.body, requestClientPlatform(req));
+  sendSession(req, res, result, 'Logged in');
 }));
 
 async function refreshForRole(req, res, expectedRole) {
-  const result = await refreshSession(req.cookies?.[refreshCookieName(expectedRole)]);
+  const authorization = req.headers.authorization || '';
+  const bearerRefreshToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : null;
+  const result = await refreshSession(
+    bearerRefreshToken || req.cookies?.[refreshCookieName(expectedRole)],
+    requestClientPlatform(req),
+  );
   const validRole = expectedRole === 'customer'
     ? result.user.role === 'customer'
     : expectedRole === 'owner'
       ? result.user.role === 'owner'
       : ['admin', 'manager', 'support'].includes(result.user.role);
   if (!validRole) throw new AppError('Refresh token role does not match this application', 403, 'FORBIDDEN');
-  sendSession(res, result, 'Session refreshed');
+  sendSession(req, res, result, 'Session refreshed');
 }
 
 authRoutes.post('/refresh/customer', authRateLimiter, validate(refreshSchema), asyncHandler((req, res) => refreshForRole(req, res, 'customer')));
@@ -90,8 +100,8 @@ authRoutes.post('/otp/request', otpRateLimiter, validate(requestOtpSchema), asyn
 }));
 
 authRoutes.post('/otp/verify', authRateLimiter, validate(verifyOtpSchema), asyncHandler(async (req, res) => {
-  const result = await verifyOtp(req.body);
-  sendSession(res, result, 'OTP verified');
+  const result = await verifyOtp({ ...req.body, clientPlatform: requestClientPlatform(req) });
+  sendSession(req, res, result, 'OTP verified');
 }));
 
 authRoutes.post('/logout', requireAuth, asyncHandler(async (req, res) => {

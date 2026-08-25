@@ -7,17 +7,18 @@ import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { applyCouponSchema, couponRedemptionQuerySchema, couponSchema } from './coupon.validation.js';
 import { createCoupon, listActiveCouponOffers, listCouponRedemptions, listCoupons, updateCoupon, validateCoupon } from './coupon.service.js';
 import { audit } from '../audit/audit.service.js';
+import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
 
 export const couponRoutes = Router();
 
 couponRoutes.use(requireAuth);
 
 couponRoutes.get('/offers', authorize('customer'), asyncHandler(async (req, res) => {
-  ok(res, { coupons: await listActiveCouponOffers(req.user._id) }, 'Coupon offers loaded');
+  ok(res, { coupons: await listActiveCouponOffers(req.user._id, { excludePaanCorner: isAndroidRequest(req) }) }, 'Coupon offers loaded');
 }));
 
 couponRoutes.post('/apply', authorize('customer'), validate(applyCouponSchema), asyncHandler(async (req, res) => {
-  const result = await validateCoupon(req.body.code, req.body.subtotal, req.user._id);
+  const result = await validateCoupon(req.body.code, req.body.subtotal, req.user._id, undefined, { excludePaanCorner: isAndroidRequest(req) });
   if (!result.coupon) {
     throw new AppError('Coupon not found or invalid', 400, 'COUPON_INVALID');
   }

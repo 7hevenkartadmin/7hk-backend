@@ -16,6 +16,8 @@ import { updateProfileSchema } from './user.validation.js';
 import { restrictedProductConsentRateLimiter } from '../../shared/middlewares/rateLimiters.js';
 import { recordRestrictedProductConsent } from '../compliance/restrictedProductConsent.service.js';
 import { restrictedProductConsentSchema } from '../compliance/restrictedProductConsent.validation.js';
+import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
+import { AppError } from '../../shared/utils/AppError.js';
 
 export const userRoutes = Router();
 
@@ -39,6 +41,7 @@ userRoutes.patch('/me', validate(updateProfileSchema), asyncHandler(async (req, 
 }));
 
 userRoutes.post('/me/restricted-product-consents', restrictedProductConsentRateLimiter, validate(restrictedProductConsentSchema), asyncHandler(async (req, res) => {
+  if (isAndroidRequest(req)) throw new AppError('Resource not found', 404, 'RESOURCE_NOT_FOUND');
   ok(res, { consent: await recordRestrictedProductConsent(req.user, req.body) }, 'Restricted-product acknowledgement recorded', 201);
 }));
 

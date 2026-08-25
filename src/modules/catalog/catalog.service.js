@@ -7,6 +7,11 @@ import { publishInventoryChange } from '../../shared/realtime/inventory.events.j
 import { env } from '../../config/env.js';
 import { maxOrderableQuantity, netAvailableStock } from '../../shared/utils/inventory.js';
 import { isSkuDuplicateKeyError, prepareNewProductSkus, prepareProductUpdateSkus } from './catalog.sku.js';
+import {
+  combineMongoFilters,
+  paanCornerCategoryExclusion,
+  paanCornerProductExclusion,
+} from './paanCorner.visibility.js';
 
 const SKU_WRITE_ATTEMPTS = 5;
 
@@ -219,14 +224,16 @@ export async function listProducts(query, options = {}) {
     if (query.minPrice !== undefined) filter.price.$gte = query.minPrice;
     if (query.maxPrice !== undefined) filter.price.$lte = query.maxPrice;
   }
-  let itemsQuery = Product.find(filter).populate('categoryRef', 'name slug').populate('subcategoryRef', 'name slug parent').sort(sortMap[query.sort] || sortMap.popularity).skip(skip).limit(limit);
+  const visibilityFilter = options.excludePaanCorner ? await paanCornerProductExclusion() : null;
+  const effectiveFilter = combineMongoFilters(filter, visibilityFilter);
+  let itemsQuery = Product.find(effectiveFilter).populate('categoryRef', 'name slug').populate('subcategoryRef', 'name slug parent').sort(sortMap[query.sort] || sortMap.popularity).skip(skip).limit(limit);
   if (search) {
     const rankFields = searchRankFields(query.q);
     const searchSort = query.sort && query.sort !== 'popularity'
       ? { ...sortMap[query.sort], _id: 1 }
       : { searchRank: -1, popularity: -1, createdAt: -1, _id: 1 };
     itemsQuery = Product.aggregate([
-      { $match: filter },
+      { $match: effectiveFilter },
       { $addFields: rankFields },
       { $sort: searchSort },
       { $skip: skip },
@@ -235,7 +242,7 @@ export async function listProducts(query, options = {}) {
   }
   const [rawItems, total] = await Promise.all([
     itemsQuery,
-    Product.countDocuments(filter),
+    Product.countDocuments(effectiveFilter),
   ]);
   const items = search
     ? await Product.populate(rawItems, [
@@ -252,11 +259,13 @@ export async function listProducts(query, options = {}) {
   return paged(responseItems, total, page, limit);
 }
 
-export async function listHomepageShelves(limit = 15) {
+export async function listHomepageShelves(limit = 15, options = {}) {
   const shelfLimit = Math.min(Math.max(Number(limit || 15), 1), 15);
-  const categories = await Category.find({ isActive: true, parent: null }).sort({ sortOrder: 1, name: 1 });
+  const categoryVisibility = options.excludePaanCorner ? await paanCornerCategoryExclusion() : null;
+  const productVisibility = options.excludePaanCorner ? await paanCornerProductExclusion() : null;
+  const categories = await Category.find(combineMongoFilters({ isActive: true, parent: null }, categoryVisibility)).sort({ sortOrder: 1, name: 1 });
   const shelves = await Promise.all(categories.map(async (category) => {
-    const products = await Product.find({ isActive: true, categoryRef: category._id })
+    const products = await Product.find(combineMongoFilters({ isActive: true, categoryRef: category._id }, productVisibility))
       .populate('categoryRef', 'name slug')
       .populate('subcategoryRef', 'name slug parent')
       .sort(sortMap.popularity)
@@ -270,23 +279,24 @@ export async function listHomepageShelves(limit = 15) {
   return { shelves: shelves.filter((shelf) => shelf.products.length > 0), limit: shelfLimit };
 }
 
-export async function getProductRecommendations(idOrSlug, limit = 10) {
-  const product = await getProductById(idOrSlug);
+export async function getProductRecommendations(idOrSlug, limit = 10, options = {}) {
+  const product = await getProductById(idOrSlug, options);
   const productId = product._id || product.id;
   const categoryId = product.categoryRef?._id || product.categoryRef;
   const recommendationLimit = Math.min(Math.max(Number(limit || 10), 1), 15);
+  const visibilityFilter = options.excludePaanCorner ? await paanCornerProductExclusion() : null;
   const [similar, popular] = await Promise.all([
-    Product.find({
+    Product.find(combineMongoFilters({
       _id: { $ne: productId },
       isActive: true,
       ...(categoryId ? { categoryRef: categoryId } : { category: product.category }),
-    }).populate('categoryRef', 'name slug').populate('subcategoryRef', 'name slug parent')
+    }, visibilityFilter)).populate('categoryRef', 'name slug').populate('subcategoryRef', 'name slug parent')
       .sort(sortMap.popularity).limit(recommendationLimit),
-    Product.find({
+    Product.find(combineMongoFilters({
       _id: { $ne: productId },
       isActive: true,
       ...(categoryId ? { categoryRef: { $ne: categoryId } } : { category: { $ne: product.category } }),
-    }).populate('categoryRef', 'name slug').populate('subcategoryRef', 'name slug parent')
+    }, visibilityFilter)).populate('categoryRef', 'name slug').populate('subcategoryRef', 'name slug parent')
       .sort(sortMap.popularity).limit(recommendationLimit),
   ]);
   return {
@@ -295,10 +305,10 @@ export async function getProductRecommendations(idOrSlug, limit = 10) {
   };
 }
 
-export async function searchSuggestions(query) {
+export async function searchSuggestions(query, options = {}) {
   const clean = String(query.q || '').trim();
   const limit = Number(query.limit || 6);
-  const result = await listProducts({ q: clean, category: query.category, limit: 30, page: 1 });
+  const result = await listProducts({ q: clean, category: query.category, limit: 30, page: 1 }, options);
   const normalizedQuery = clean.toLocaleLowerCase();
   const suggestions = [];
   const seen = new Set();
@@ -330,9 +340,10 @@ export async function searchSuggestions(query) {
   return { suggestions: suggestions.slice(0, limit) };
 }
 
-export async function getProductById(idOrSlug) {
+export async function getProductById(idOrSlug, options = {}) {
   const lookup = idOrSlug.match(/^[a-f\d]{24}$/i) ? { _id: idOrSlug } : { slug: idOrSlug };
-  const product = await Product.findOne(lookup).populate('categoryRef', 'name slug').populate('subcategoryRef', 'name slug parent');
+  const visibilityFilter = options.excludePaanCorner ? await paanCornerProductExclusion() : null;
+  const product = await Product.findOne(combineMongoFilters(lookup, visibilityFilter)).populate('categoryRef', 'name slug').populate('subcategoryRef', 'name slug parent');
   if (!product || !product.isActive) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
   return toPublicProduct(product);
 }
@@ -397,7 +408,9 @@ export async function deleteProduct(id) {
 }
 
 export async function listCategories(options = {}) {
-  const filter = options.includeInactive ? {} : { isActive: true };
+  const activeFilter = options.includeInactive ? {} : { isActive: true };
+  const visibilityFilter = options.excludePaanCorner ? await paanCornerCategoryExclusion() : null;
+  const filter = combineMongoFilters(activeFilter, visibilityFilter);
   return Category.find(filter).populate('parent', 'name slug').sort({ parent: 1, sortOrder: 1, name: 1 });
 }
 

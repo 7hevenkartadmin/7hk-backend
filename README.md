@@ -51,6 +51,7 @@ The API runs on `http://localhost:5000`.
 - Access and refresh JWTs
 - Role-based admin/manager/support authorization
 - Zod request validation
+- Firebase App Check/Play Integrity verification and platform-bound sessions for the Android client; see [Android client attestation](docs/android-client-attestation.md)
 
 ## Verification
 

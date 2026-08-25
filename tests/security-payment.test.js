@@ -44,11 +44,18 @@ test('access and refresh tokens carry expected claims and verify with configured
   assert.equal(accessPayload.role, 'admin');
   assert.equal(accessPayload.type, 'access');
   assert.equal(accessPayload.tokenVersion, 0);
+  assert.equal(accessPayload.clientPlatform, 'web');
   assert.equal(refreshPayload.sub, user.id);
   assert.equal(refreshPayload.type, 'refresh');
   assert.equal(refreshPayload.tokenVersion, 0);
+  assert.equal(refreshPayload.clientPlatform, 'web');
   assert.equal(accessPayload.iss, '7heaven-api');
   assert.deepEqual(accessPayload.aud, '7heaven-web');
+
+  const androidAccess = verifyAccessToken(signAccessToken({ ...user, role: 'customer' }, 'android'));
+  const androidRefresh = verifyRefreshToken(signRefreshToken({ ...user, role: 'customer' }, 'android'));
+  assert.equal(androidAccess.clientPlatform, 'android');
+  assert.equal(androidRefresh.clientPlatform, 'android');
 });
 
 test('token hashing is deterministic and does not expose raw token', () => {

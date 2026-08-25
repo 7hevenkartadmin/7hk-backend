@@ -7,6 +7,8 @@ import {
   AUTH_CONTEXT_HEADER,
   normalizeAuthContext,
 } from './auth.cookies.js';
+import { requestClientPlatform } from '../../shared/middlewares/clientPlatform.js';
+import { env } from '../../config/env.js';
 
 export function accessTokenForRequest(req) {
   const header = req.headers.authorization || '';
@@ -51,9 +53,23 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
   if (!token) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
 
   const payload = verifyAccessToken(token);
+  const requestPlatform = requestClientPlatform(req);
+  const tokenPlatform = payload.clientPlatform === 'android' ? 'android' : 'web';
+  if (tokenPlatform !== requestPlatform) {
+    throw new AppError('Session belongs to a different client platform', 401, 'INVALID_SESSION');
+  }
+  if (env.ANDROID_APP_CHECK_MODE === 'enforce'
+    && context === 'bearer'
+    && payload.role === 'customer'
+    && !payload.clientPlatform) {
+    throw new AppError('This mobile session must be renewed', 401, 'CLIENT_PLATFORM_REQUIRED');
+  }
   const user = await User.findById(payload.sub);
   if (!userSessionIsCurrent(user, payload, context)) {
     throw new AppError('Invalid session', 401, 'INVALID_SESSION');
+  }
+  if (requestPlatform === 'android' && user.role !== 'customer') {
+    throw new AppError('The Android app only supports customer accounts', 403, 'ANDROID_CUSTOMER_ONLY');
   }
   req.user = user;
   req.authContext = context;

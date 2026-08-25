@@ -3,8 +3,15 @@ import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { INVENTORY_EVENT, inventoryEvents } from '../../shared/realtime/inventory.events.js';
 import { ORDER_EVENT, orderEvents } from '../../shared/realtime/order.events.js';
 import { openSseStream, sendSseEvent } from '../../shared/realtime/sse.js';
+import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
 
 export const realtimeRoutes = Router();
+
+function publicOrderEvent(payload) {
+  const safePayload = { ...payload };
+  delete safePayload.restrictedCatalog;
+  return safePayload;
+}
 
 function streamAdminEvents(req, res, scope = 'admin') {
   openSseStream(req, res);
@@ -19,7 +26,7 @@ function streamAdminEvents(req, res, scope = 'admin') {
   };
 
   const onOrderChange = (payload) => {
-    sendSseEvent(res, ORDER_EVENT, payload);
+    sendSseEvent(res, ORDER_EVENT, publicOrderEvent(payload));
   };
 
   inventoryEvents.on(INVENTORY_EVENT, onInventoryChange);
@@ -35,6 +42,7 @@ function streamAdminEvents(req, res, scope = 'admin') {
 
 function streamCustomerOrderEvents(req, res) {
   const customerId = String(req.user._id);
+  const excludePaanCorner = isAndroidRequest(req);
   openSseStream(req, res);
   sendSseEvent(res, 'connected', { scope: 'customer.orders', connectedAt: new Date().toISOString() });
 
@@ -44,7 +52,8 @@ function streamCustomerOrderEvents(req, res) {
 
   const onOrderChange = (payload) => {
     if (String(payload.customerId || '') !== customerId) return;
-    sendSseEvent(res, ORDER_EVENT, payload);
+    if (excludePaanCorner && payload.restrictedCatalog) return;
+    sendSseEvent(res, ORDER_EVENT, publicOrderEvent(payload));
   };
 
   orderEvents.on(ORDER_EVENT, onOrderChange);

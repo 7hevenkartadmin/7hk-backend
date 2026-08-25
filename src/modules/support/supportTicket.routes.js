@@ -23,6 +23,7 @@ import {
 } from './supportTicket.validation.js';
 import { SupportTicket } from './supportTicket.model.js';
 import { supportPickupOtpRateLimiter, supportTicketRateLimiter } from '../../shared/middlewares/rateLimiters.js';
+import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
 
 export const supportTicketRoutes = Router();
 
@@ -35,11 +36,11 @@ supportTicketRoutes.post('/uploads/proof', authorize('customer'), supportTicketR
 }));
 
 supportTicketRoutes.post('/', authorize('customer'), supportTicketRateLimiter, validate(createSupportTicketSchema), asyncHandler(async (req, res) => {
-  created(res, { ticket: await createSupportTicket(req.user, req.body) }, 'Support ticket created');
+  created(res, { ticket: await createSupportTicket(req.user, req.body, { excludePaanCorner: isAndroidRequest(req) }) }, 'Support ticket created');
 }));
 
 supportTicketRoutes.get('/me', authorize('customer'), asyncHandler(async (req, res) => {
-  ok(res, { tickets: await listCustomerSupportTickets(req.user) }, 'Support tickets loaded');
+  ok(res, { tickets: await listCustomerSupportTickets(req.user, { excludePaanCorner: isAndroidRequest(req) }) }, 'Support tickets loaded');
 }));
 
 supportTicketRoutes.get('/admin', authorize('admin', 'manager', 'support'), validate(listSupportTicketsSchema, 'query'), asyncHandler(async (req, res) => {

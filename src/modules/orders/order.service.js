@@ -45,6 +45,13 @@ import {
   restoreOrderInventory,
   sellAvailableInventory,
 } from '../inventory/inventory.service.js';
+import {
+  androidVisibleOrderFilter,
+  assertNoPaanCornerItems,
+  combineMongoFilters,
+  isPaanCornerOrder,
+  paanCornerProductExclusion,
+} from '../catalog/paanCorner.visibility.js';
 
 const orderId = customAlphabet('123456789ABCDEFGHJKLMNPQRSTUVWXYZ', 8);
 const allowedTransitions = {
@@ -62,6 +69,27 @@ export function canTransitionOrderStatus(currentStatus, nextStatus) {
 
 export function canCustomerCancelOrder(status) {
   return status === 'placed' || status === 'confirmed';
+}
+
+export const CUSTOMER_PREPAID_CANCELLATION_FEE_RATE = 10;
+
+export function customerPrepaidCancellationBreakdown(total) {
+  const numericTotal = Number(total);
+  const grossPaidPaise = Number.isFinite(numericTotal)
+    ? Math.max(0, Math.round(numericTotal * 100))
+    : 0;
+  const cancellationFeePaise = Math.round(
+    grossPaidPaise * CUSTOMER_PREPAID_CANCELLATION_FEE_RATE / 100,
+  );
+  const refundAmountPaise = Math.max(0, grossPaidPaise - cancellationFeePaise);
+  return {
+    grossPaidPaise,
+    cancellationFeePaise,
+    refundAmountPaise,
+    grossPaidAmount: grossPaidPaise / 100,
+    cancellationFeeAmount: cancellationFeePaise / 100,
+    refundAmount: refundAmountPaise / 100,
+  };
 }
 
 function enforceDeliveryRadius(address) {
@@ -97,9 +125,10 @@ function purchasableVariant(product, variantId) {
   return variant;
 }
 
-async function hydrateItems(inputItems, session, { checkAvailability = true } = {}) {
+async function hydrateItems(inputItems, session, { checkAvailability = true, excludePaanCorner = false } = {}) {
   const ids = inputItems.map((item) => item.productId);
-  const query = Product.find({ _id: { $in: ids }, isActive: true });
+  const visibility = excludePaanCorner ? await paanCornerProductExclusion() : null;
+  const query = Product.find(combineMongoFilters({ _id: { $in: ids }, isActive: true }, visibility));
   if (typeof query.populate === 'function') query.populate('categoryRef', 'name slug');
   if (session) query.session(session);
   const products = await query;
@@ -160,8 +189,9 @@ function applyCheckoutSnapshot(items, snapshot) {
   });
 }
 
-export async function quoteOrder(customer, payload) {
-  const items = await hydrateItems(payload.items);
+export async function quoteOrder(customer, payload, { excludePaanCorner = false } = {}) {
+  const items = await hydrateItems(payload.items, undefined, { excludePaanCorner });
+  if (excludePaanCorner) assertNoPaanCornerItems(items);
   const basePaymentPolicy = paymentPolicyForItems(items);
   const codAccountDisabled = Boolean(customer.isCodDisabled || await User.exists({ _id: customer._id, isCodDisabled: true }));
   const paymentPolicy = codAccountDisabled
@@ -177,7 +207,13 @@ export async function quoteOrder(customer, payload) {
     : basePaymentPolicy;
   const restrictedProductPolicy = assertRestrictedProductCouponAllowed(items, payload.couponCode);
   const subtotalOnly = calculateCartTotals({ items }).subtotal;
-  const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly, customer._id);
+  const { coupon, discount } = await validateCoupon(
+    payload.couponCode,
+    subtotalOnly,
+    customer._id,
+    undefined,
+    { excludePaanCorner },
+  );
   const selectedAddress = payload.addressId ? await findOwnedAddress(customer._id, payload.addressId) : null;
   if (payload.addressId && !selectedAddress) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   await assertStoreAcceptingOrders({ distanceKm: selectedAddress?.distanceFromStoreKm });
@@ -207,16 +243,19 @@ export async function quoteOrder(customer, payload) {
   };
 }
 
-export async function createOrder(customer, payload) {
+export async function createOrder(customer, payload, { excludePaanCorner = false } = {}) {
   if (payload.paymentMethod === 'razorpay' && payload.paymentSessionId) {
-    const existingOrder = await Order.findOne({ customer: customer._id, paymentIntent: payload.paymentSessionId });
+    const existingOrder = await Order.findOne(combineMongoFilters(
+      { customer: customer._id, paymentIntent: payload.paymentSessionId },
+      excludePaanCorner ? androidVisibleOrderFilter() : null,
+    ));
     if (existingOrder) return { order: existingOrder, payment: null };
   }
   const session = await mongoose.startSession();
   let result;
   try {
     await session.withTransaction(async () => {
-      result = await performCreateOrder(customer, payload, session);
+      result = await performCreateOrder(customer, payload, session, { excludePaanCorner });
     });
   } catch (error) {
     if (error?.code !== 20 && !String(error?.message || '').includes('Transaction numbers are only allowed')) {
@@ -233,7 +272,7 @@ export async function createOrder(customer, payload) {
     if (env.NODE_ENV === 'production') {
       throw new AppError('Order database transactions are unavailable', 503, 'ORDER_TRANSACTION_UNAVAILABLE');
     }
-    result = await performCreateOrder(customer, payload);
+    result = await performCreateOrder(customer, payload, undefined, { excludePaanCorner });
   } finally {
     await session.endSession();
   }
@@ -246,12 +285,13 @@ export async function createOrder(customer, payload) {
     status: result.order.status,
     paymentStatus: result.order.paymentStatus,
     total: result.order.total,
+    restrictedCatalog: isPaanCornerOrder(result.order),
   });
   await sendOrderPlacedNotification(result.order);
   return { order: result.order, payment: result.payment };
 }
 
-async function performCreateOrder(customer, payload, session) {
+async function performCreateOrder(customer, payload, session, { excludePaanCorner = false } = {}) {
   let paymentIntent;
   let items;
   let coupon;
@@ -266,18 +306,28 @@ async function performCreateOrder(customer, payload, session) {
 
   if (payload.paymentMethod === 'razorpay') {
     paymentPreview = await getVerifiedPaymentIntentForOrder(payload.paymentSessionId, customer, session);
-    items = applyCheckoutSnapshot(await hydrateItems(payload.items, session, { checkAvailability: false }), paymentPreview.checkoutSnapshot);
+    items = applyCheckoutSnapshot(await hydrateItems(payload.items, session, {
+      checkAvailability: false,
+      excludePaanCorner,
+    }), paymentPreview.checkoutSnapshot);
     totals = paymentPreview.checkoutSnapshot.totals;
     couponCode = paymentPreview.checkoutSnapshot.couponCode || undefined;
     slot = await getReservedSlotForIntent(paymentPreview, session);
   } else {
-    items = await hydrateItems(payload.items, session);
+    items = await hydrateItems(payload.items, session, { excludePaanCorner });
     assertRestrictedProductCouponAllowed(items, payload.couponCode);
     subtotalOnly = calculateCartTotals({ items }).subtotal;
-    const validatedCoupon = await validateCoupon(payload.couponCode, subtotalOnly, customer._id, session);
+    const validatedCoupon = await validateCoupon(
+      payload.couponCode,
+      subtotalOnly,
+      customer._id,
+      session,
+      { excludePaanCorner },
+    );
     coupon = validatedCoupon.coupon;
     couponDiscount = validatedCoupon.discount;
   }
+  if (excludePaanCorner) assertNoPaanCornerItems(items);
   assertPaymentMethodAllowed(items, payload.paymentMethod);
   const restrictedProductConsent = await assertRestrictedProductConsentForOrder({
     items,
@@ -438,17 +488,37 @@ async function validateCodEligibility(customer, payload, totals) {
 function customerOrderPayload(order) {
   const payload = typeof order.toObject === 'function' ? order.toObject() : { ...order };
   if (payload.status === 'out_for_delivery') payload.deliveryOtp = deliveryOtpForOrder(payload._id);
+  const prepaidBreakdown = customerPrepaidCancellationBreakdown(payload.total);
+  payload.cancellationPolicy = {
+    eligible: canCustomerCancelOrder(payload.status),
+    closesAtStatus: 'packed',
+    feeApplies: payload.paymentMethod === 'razorpay',
+    cancellationFeeRate: payload.paymentMethod === 'razorpay'
+      ? CUSTOMER_PREPAID_CANCELLATION_FEE_RATE
+      : 0,
+    cancellationFeeAmount: payload.paymentMethod === 'razorpay'
+      ? prepaidBreakdown.cancellationFeeAmount
+      : 0,
+    refundAmount: payload.paymentMethod === 'razorpay' ? prepaidBreakdown.refundAmount : 0,
+    currency: 'INR',
+  };
   return payload;
 }
 
-export async function listCustomerOrders(customerId) {
-  const orders = await Order.find({ customer: customerId }).sort({ createdAt: -1 });
+export async function listCustomerOrders(customerId, { excludePaanCorner = false } = {}) {
+  const orders = await Order.find(combineMongoFilters(
+    { customer: customerId },
+    excludePaanCorner ? androidVisibleOrderFilter() : null,
+  )).sort({ createdAt: -1 });
   return orders.map(customerOrderPayload);
 }
 
-export async function getOrderForCustomer(orderIdOrNumber, customer) {
+export async function getOrderForCustomer(orderIdOrNumber, customer, { excludePaanCorner = false } = {}) {
   const filter = orderIdOrNumber.startsWith('ORD-') ? { orderNumber: orderIdOrNumber } : { _id: orderIdOrNumber };
-  const order = await Order.findOne({ ...filter, customer: customer._id });
+  const order = await Order.findOne(combineMongoFilters(
+    { ...filter, customer: customer._id },
+    excludePaanCorner ? androidVisibleOrderFilter() : null,
+  ));
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
   return customerOrderPayload(order);
 }
@@ -487,20 +557,25 @@ export async function verifyDeliveryOtp(id, otp, actor, { restrictedProductCheck
   publishOrderChange({
     action: 'order.status.updated', orderId: String(order._id), orderNumber: order.orderNumber,
     customerId: String(order.customer), status: order.status, paymentStatus: order.paymentStatus, total: order.total,
+    restrictedCatalog: isPaanCornerOrder(order),
   });
   await sendOrderStatusNotification(order);
   return order;
 }
 
-export async function cancelOrder(id, payload, actor, { customerInitiated = false } = {}) {
+export async function cancelOrder(id, payload, actor, { customerInitiated = false, excludePaanCorner = false } = {}) {
   const session = await mongoose.startSession();
   let order;
   let changes = [];
   let changed = false;
   let refundQueued = false;
+  let refundReasonCode = 'ADMIN_ORDER_CANCELLED';
+  let refundTargetPaise;
   try {
     await session.withTransaction(async () => {
-      const query = Order.findById(id);
+      const query = excludePaanCorner
+        ? Order.findOne(combineMongoFilters({ _id: id }, androidVisibleOrderFilter()))
+        : Order.findById(id);
       query.session(session);
       order = await query;
       if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
@@ -525,14 +600,48 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
       order.status = 'cancelled';
       order.statusTimeline = order.statusTimeline || [];
       order.statusTimeline.push({ status: 'cancelled', note: payload.note || 'Order cancelled', actor: actor._id });
+      const cancellationBreakdown = customerInitiated && order.paymentMethod === 'razorpay'
+        ? customerPrepaidCancellationBreakdown(order.total)
+        : {
+          grossPaidPaise: Math.max(0, Math.round(Number(order.total) * 100)),
+          cancellationFeePaise: 0,
+          refundAmountPaise: Math.max(0, Math.round(Number(order.total) * 100)),
+          grossPaidAmount: Number(order.total),
+          cancellationFeeAmount: 0,
+          refundAmount: Number(order.total),
+        };
+      refundReasonCode = customerInitiated ? 'CUSTOMER_CANCELLED_BEFORE_PACKED' : 'ADMIN_ORDER_CANCELLED';
+      refundTargetPaise = cancellationBreakdown.refundAmountPaise;
+      if (order.paymentMethod === 'razorpay') {
+        order.refund = {
+          ...(order.refund?.toObject?.() || {}),
+          amount: cancellationBreakdown.refundAmount,
+          grossPaidAmount: cancellationBreakdown.grossPaidAmount,
+          cancellationFeeRate: customerInitiated ? CUSTOMER_PREPAID_CANCELLATION_FEE_RATE : 0,
+          cancellationFeeAmount: cancellationBreakdown.cancellationFeeAmount,
+          initiatedBy: customerInitiated ? 'customer' : 'staff',
+          reason: refundReasonCode,
+          requiresManualReview: false,
+        };
+      }
       if (order.paymentMethod === 'razorpay' && ['paid', 'partially_refunded'].includes(order.paymentStatus)) {
-        refundQueued = Boolean(await queueOrderRefund(order, 'ORDER_CANCELLED', session));
+        const queuedRefund = await queueOrderRefund(
+          order,
+          refundReasonCode,
+          session,
+          { maxTotalRefundPaise: refundTargetPaise },
+        );
+        refundQueued = Boolean(queuedRefund && queuedRefund.status !== 'refunded');
         if (refundQueued) {
           order.paymentStatus = 'refund_pending';
           order.refund = {
             status: 'refund_pending',
-            amount: order.total,
-            reason: 'ORDER_CANCELLED',
+            amount: cancellationBreakdown.refundAmount,
+            grossPaidAmount: cancellationBreakdown.grossPaidAmount,
+            cancellationFeeRate: customerInitiated ? CUSTOMER_PREPAID_CANCELLATION_FEE_RATE : 0,
+            cancellationFeeAmount: cancellationBreakdown.cancellationFeeAmount,
+            initiatedBy: customerInitiated ? 'customer' : 'staff',
+            reason: refundReasonCode,
             initiatedAt: new Date(),
             requiresManualReview: false,
           };
@@ -540,9 +649,23 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
           order.refundTimeline.push({
             eventKey: `cancel:${order._id}`,
             status: 'refund_pending',
-            amount: order.total,
-            note: 'Automatic refund requested after customer cancellation',
+            amount: cancellationBreakdown.refundAmount,
+            note: customerInitiated
+              ? `Automatic 90% refund requested; 10% cancellation fee retained (${cancellationBreakdown.cancellationFeeAmount.toFixed(2)} INR)`
+              : 'Automatic full refund requested after staff cancellation',
           });
+        } else if (queuedRefund?.status === 'refunded') {
+          order.refund = {
+            status: order.paymentStatus,
+            amount: cancellationBreakdown.refundAmount,
+            grossPaidAmount: cancellationBreakdown.grossPaidAmount,
+            cancellationFeeRate: customerInitiated ? CUSTOMER_PREPAID_CANCELLATION_FEE_RATE : 0,
+            cancellationFeeAmount: cancellationBreakdown.cancellationFeeAmount,
+            initiatedBy: customerInitiated ? 'customer' : 'staff',
+            reason: refundReasonCode,
+            processedAt: new Date(),
+            requiresManualReview: false,
+          };
         }
       }
       await order.save({ session });
@@ -556,7 +679,7 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
   for (const change of changes) publishInventoryChange(change);
   if (refundQueued) {
     try {
-      await initiateOrderRefund(order, 'ORDER_CANCELLED');
+      await initiateOrderRefund(order, refundReasonCode, { maxTotalRefundPaise: refundTargetPaise });
     } catch (error) {
       console.error('Queued order refund provider attempt failed:', error);
     } finally {
@@ -566,13 +689,14 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
   return { order, changed: true };
 }
 
-export async function cancelCustomerOrder(id, reason, customer) {
-  const result = await cancelOrder(id, { note: reason }, customer, { customerInitiated: true });
+export async function cancelCustomerOrder(id, reason, customer, { excludePaanCorner = false } = {}) {
+  const result = await cancelOrder(id, { note: reason }, customer, { customerInitiated: true, excludePaanCorner });
   if (!result.changed) return result.order;
   publishOrderChange({
     action: 'order.status.updated', orderId: String(result.order._id), orderNumber: result.order.orderNumber,
     customerId: String(result.order.customer), status: result.order.status,
     paymentStatus: result.order.paymentStatus, total: result.order.total,
+    restrictedCatalog: isPaanCornerOrder(result.order),
   });
   await sendOrderStatusNotification(result.order);
   return result.order;
@@ -585,6 +709,7 @@ export async function updateOrderStatus(id, payload, actor) {
     publishOrderChange({
       action: 'order.status.updated', orderId: String(cancelled._id), orderNumber: cancelled.orderNumber,
       customerId: String(cancelled.customer), status: cancelled.status, paymentStatus: cancelled.paymentStatus, total: cancelled.total,
+      restrictedCatalog: isPaanCornerOrder(cancelled),
     });
     await sendOrderStatusNotification(cancelled);
     return cancelled;
@@ -603,6 +728,7 @@ export async function updateOrderStatus(id, payload, actor) {
   publishOrderChange({
     action: 'order.status.updated', orderId: String(order._id), orderNumber: order.orderNumber,
     customerId: String(order.customer), status: order.status, paymentStatus: order.paymentStatus, total: order.total,
+    restrictedCatalog: isPaanCornerOrder(order),
   });
   await sendOrderStatusNotification(order);
   return order;

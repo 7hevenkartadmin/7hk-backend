@@ -11,32 +11,37 @@ import { Category } from './category.model.js';
 import { catalogImageUpload } from './catalog-upload.middleware.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { deleteCatalogImage, uploadCatalogImage } from './cloudinary-image.service.js';
+import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
 
 export const catalogRoutes = Router();
 
+function publicCatalogOptions(req) {
+  return { excludePaanCorner: isAndroidRequest(req) };
+}
+
 catalogRoutes.get('/products', validate(listProductsSchema, 'query'), asyncHandler(async (req, res) => {
   req.query.limit = Math.min(req.query.limit || 15, 15);
-  ok(res, await listProducts(req.query), 'Products loaded');
+  ok(res, await listProducts(req.query, publicCatalogOptions(req)), 'Products loaded');
 }));
 
 catalogRoutes.get('/home', asyncHandler(async (req, res) => {
-  ok(res, await listHomepageShelves(req.query.limit), 'Homepage catalog loaded');
+  ok(res, await listHomepageShelves(req.query.limit, publicCatalogOptions(req)), 'Homepage catalog loaded');
 }));
 
 catalogRoutes.get('/search/suggestions', validate(searchSuggestionsSchema, 'query'), asyncHandler(async (req, res) => {
-  ok(res, await searchSuggestions(req.query), 'Search suggestions loaded');
+  ok(res, await searchSuggestions(req.query, publicCatalogOptions(req)), 'Search suggestions loaded');
 }));
 
 catalogRoutes.get('/products/:idOrSlug/recommendations', asyncHandler(async (req, res) => {
-  ok(res, await getProductRecommendations(req.params.idOrSlug, req.query.limit), 'Product recommendations loaded');
+  ok(res, await getProductRecommendations(req.params.idOrSlug, req.query.limit, publicCatalogOptions(req)), 'Product recommendations loaded');
 }));
 
 catalogRoutes.get('/products/:idOrSlug', asyncHandler(async (req, res) => {
-  ok(res, { product: await getProductById(req.params.idOrSlug) }, 'Product loaded');
+  ok(res, { product: await getProductById(req.params.idOrSlug, publicCatalogOptions(req)) }, 'Product loaded');
 }));
 
-catalogRoutes.get('/categories', asyncHandler(async (_req, res) => {
-  ok(res, { categories: await listCategories() }, 'Categories loaded');
+catalogRoutes.get('/categories', asyncHandler(async (req, res) => {
+  ok(res, { categories: await listCategories(publicCatalogOptions(req)) }, 'Categories loaded');
 }));
 
 catalogRoutes.get('/admin/categories', requireAuth, authorize('admin', 'manager'), asyncHandler(async (_req, res) => {

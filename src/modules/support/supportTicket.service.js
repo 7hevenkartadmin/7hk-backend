@@ -4,6 +4,7 @@ import { Order } from '../orders/order.model.js';
 import { initiateOrderRefund } from '../payments/payment.service.js';
 import { SupportTicket } from './supportTicket.model.js';
 import { matchesPickupOtp, pickupOtpForTicket } from './pickup-otp.service.js';
+import { androidVisibleOrderFilter, combineMongoFilters } from '../catalog/paanCorner.visibility.js';
 
 function customerTicketPayload(ticket) {
   const payload = typeof ticket.toObject === 'function' ? ticket.toObject() : { ...ticket };
@@ -11,8 +12,11 @@ function customerTicketPayload(ticket) {
   return payload;
 }
 
-export async function createSupportTicket(customer, payload) {
-  const order = await Order.findOne({ _id: payload.orderId, customer: customer._id });
+export async function createSupportTicket(customer, payload, { excludePaanCorner = false } = {}) {
+  const order = await Order.findOne(combineMongoFilters(
+    { _id: payload.orderId, customer: customer._id },
+    excludePaanCorner ? androidVisibleOrderFilter() : null,
+  ));
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
   if (order.status !== 'delivered') {
     throw new AppError('Support tickets for item issues are available after delivery.', 409, 'SUPPORT_TICKET_DELIVERY_REQUIRED');
@@ -33,8 +37,17 @@ export async function createSupportTicket(customer, payload) {
   });
 }
 
-export async function listCustomerSupportTickets(customer) {
-  const tickets = await SupportTicket.find({ customer: customer._id }).sort({ createdAt: -1 });
+export async function listCustomerSupportTickets(customer, { excludePaanCorner = false } = {}) {
+  const visibleOrderIds = excludePaanCorner
+    ? await Order.find(combineMongoFilters(
+      { customer: customer._id },
+      androidVisibleOrderFilter(),
+    )).distinct('_id')
+    : null;
+  const tickets = await SupportTicket.find({
+    customer: customer._id,
+    ...(visibleOrderIds ? { order: { $in: visibleOrderIds } } : {}),
+  }).sort({ createdAt: -1 });
   return tickets.map(customerTicketPayload);
 }
 

@@ -79,11 +79,15 @@ window.
 { "phone": "+919876543210", "otp": "123456", "name": "Optional for a new customer" }
 ```
 
-The response exposes only the user. Authentication tokens are returned as
-HttpOnly cookies. The website uses `credentials: include`. The Android HTTP
-client must use a persistent, secure cookie jar, accept `Set-Cookie`, and send
-the cookies on later API requests. It must never copy session cookies into app
-logs or general preferences.
+For the website, the response exposes only the user and authentication tokens
+are returned as HttpOnly cookies; use `credentials: include`. An attested
+Android request receives `{ user, tokens: { accessToken, refreshToken } }`
+without browser cookies. Keep the refresh token in OS-backed secure storage,
+keep the access token in memory where practical, and send the access token as a
+Bearer token. The Android refresh endpoint accepts the refresh token as its
+Bearer value. Every Android API call must also satisfy the headers and Firebase
+App Check contract in [Android client attestation](android-client-attestation.md).
+Never write either token to logs or general application preferences.
 
 ## Operational behavior
 

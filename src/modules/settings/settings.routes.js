@@ -8,11 +8,28 @@ import { storeSettingsSchema } from './settings.validation.js';
 import { availabilityQuerySchema } from './settings.validation.js';
 import { getStoreAvailability } from './storeAvailability.service.js';
 import { audit } from '../audit/audit.service.js';
+import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
+import { containsPaanCornerReference } from '../catalog/paanCorner.visibility.js';
 
 export const settingsRoutes = Router();
 
-settingsRoutes.get('/', asyncHandler(async (_req, res) => {
-  ok(res, { settings: await getStoreSettings() }, 'Store settings loaded');
+function settingsForClient(settings, req) {
+  if (!isAndroidRequest(req)) return settings;
+  return {
+    ...settings,
+    homepageBanners: (settings.homepageBanners || []).filter((banner) => ![
+      banner.title,
+      banner.highlight,
+      banner.copy,
+      banner.tag,
+      banner.ctaLabel,
+      banner.ctaHref,
+    ].some(containsPaanCornerReference)),
+  };
+}
+
+settingsRoutes.get('/', asyncHandler(async (req, res) => {
+  ok(res, { settings: settingsForClient(await getStoreSettings(), req) }, 'Store settings loaded');
 }));
 
 settingsRoutes.get('/availability', validate(availabilityQuerySchema, 'query'), asyncHandler(async (req, res) => {

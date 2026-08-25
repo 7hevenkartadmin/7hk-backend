@@ -59,6 +59,8 @@ test('login completion schema requires immutable replay metadata and a unique pr
   assert.equal(LoginCompletion.schema.path('proofDigest').options.immutable, true);
   assert.equal(LoginCompletion.schema.path('accessJti').options.select, false);
   assert.equal(LoginCompletion.schema.path('refreshJti').options.select, false);
+  assert.equal(completion.clientPlatform, 'web');
+  assert.equal(LoginCompletion.schema.path('clientPlatform').options.immutable, true);
   assert.equal(LoginCompletion.schema.path('proofId'), undefined);
   assert.equal(LoginCompletion.schema.path('otp'), undefined);
   assert.equal(LoginCompletion.schema.path('phone'), undefined);

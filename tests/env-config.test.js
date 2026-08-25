@@ -37,6 +37,9 @@ const productionRequirements = {
   SMTP_USER: 'security@example.com',
   SMTP_PASS: 'synthetic-smtp-password',
   SMTP_FROM: 'security@example.com',
+  ANDROID_APP_CHECK_MODE: 'enforce',
+  FIREBASE_PROJECT_ID: 'synthetic-firebase-project',
+  FIREBASE_ANDROID_APP_ID: '1:123456789:android:abcdef123456',
 };
 
 function environmentFor(NODE_ENV, overrides = {}) {
@@ -87,6 +90,21 @@ test('valid Meta configuration is accepted in every environment', () => {
       'meta',
     );
   }
+});
+
+test('production requires enforced Android App Check with an exact Firebase identity', () => {
+  assertIssueFields(
+    environmentFor('production', { ...validMeta, ANDROID_APP_CHECK_MODE: 'monitor' }),
+    ['ANDROID_APP_CHECK_MODE'],
+  );
+  assertIssueFields(
+    environmentFor('production', {
+      ...validMeta,
+      FIREBASE_PROJECT_ID: '',
+      FIREBASE_ANDROID_APP_ID: '',
+    }),
+    ['FIREBASE_PROJECT_ID', 'FIREBASE_ANDROID_APP_ID'],
+  );
 });
 
 test('Meta selection reports every missing field together in every environment', () => {

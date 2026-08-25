@@ -6,6 +6,7 @@ import { applySecurity } from './shared/middlewares/security.js';
 import { errorHandler, notFound } from './shared/middlewares/errorHandler.js';
 import { routes } from './routes.js';
 import { assertDatabaseTransactionSupport } from './config/database.js';
+import { identifyClientPlatform } from './shared/middlewares/clientPlatform.js';
 
 export function createApp({
   databaseTransactionCheck = assertDatabaseTransactionSupport,
@@ -39,7 +40,7 @@ export function createApp({
     },
   }));
 
-  app.use(`/api/${env.API_VERSION}`, routes);
+  app.use(`/api/${env.API_VERSION}`, identifyClientPlatform, routes);
   app.use(notFound);
   app.use(errorHandler);
   return app;

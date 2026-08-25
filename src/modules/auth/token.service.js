@@ -52,11 +52,12 @@ function deterministicJwtId(proofDigest, tokenType) {
     .digest('hex');
 }
 
-function signCompletionToken({ userId, role, tokenVersion, type, issuedAt, expiresAt, jwtid }) {
+function signCompletionToken({ userId, role, tokenVersion, clientPlatform, type, issuedAt, expiresAt, jwtid }) {
   const payload = {
     sub: String(userId),
     ...(type === 'access' ? { role } : {}),
     tokenVersion,
+    clientPlatform: clientPlatform === 'android' ? 'android' : 'web',
     type,
     iat: issuedAt,
     exp: expiresAt,
@@ -70,6 +71,7 @@ function serializeCompletionMetadata(metadata) {
     userId: String(metadata.userId),
     role: metadata.role,
     tokenVersion: Number(metadata.tokenVersion || 0),
+    clientPlatform: metadata.clientPlatform === 'android' ? 'android' : 'web',
     issuedAt: Math.floor(new Date(metadata.issuedAt).getTime() / 1000),
     accessExpiresAt: Math.floor(new Date(metadata.accessExpiresAt).getTime() / 1000),
     refreshExpiresAt: Math.floor(new Date(metadata.refreshExpiresAt).getTime() / 1000),
@@ -78,24 +80,26 @@ function serializeCompletionMetadata(metadata) {
   };
 }
 
-export function signAccessToken(user) {
+export function signAccessToken(user, clientPlatform = 'web') {
   return jwt.sign({
     sub: user.id,
     role: user.role,
     tokenVersion: user.tokenVersion || 0,
+    clientPlatform: clientPlatform === 'android' ? 'android' : 'web',
     type: 'access',
   }, env.JWT_ACCESS_SECRET, signingOptions(env.ACCESS_TOKEN_TTL));
 }
 
-export function signRefreshToken(user) {
+export function signRefreshToken(user, clientPlatform = 'web') {
   return jwt.sign({
     sub: user.id,
     tokenVersion: user.tokenVersion || 0,
+    clientPlatform: clientPlatform === 'android' ? 'android' : 'web',
     type: 'refresh',
   }, env.JWT_REFRESH_SECRET, signingOptions(env.REFRESH_TOKEN_TTL));
 }
 
-export function createLoginCompletionTokens({ proofDigest, user, issuedAt = new Date() }) {
+export function createLoginCompletionTokens({ proofDigest, user, clientPlatform = 'web', issuedAt = new Date() }) {
   const issuedAtSeconds = Math.floor(new Date(issuedAt).getTime() / 1000);
   if (!Number.isSafeInteger(issuedAtSeconds) || issuedAtSeconds <= 0) {
     throw new TypeError('Login completion issuance time is invalid');
@@ -105,6 +109,7 @@ export function createLoginCompletionTokens({ proofDigest, user, issuedAt = new 
     userId: String(user.id || user._id),
     role: user.role,
     tokenVersion: Number(user.tokenVersion || 0),
+    clientPlatform: clientPlatform === 'android' ? 'android' : 'web',
     issuedAt: new Date(issuedAtSeconds * 1000),
     accessExpiresAt: new Date(expirationForTtl(
       issuedAtSeconds,

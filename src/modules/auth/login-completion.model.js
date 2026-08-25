@@ -23,6 +23,7 @@ const loginCompletionSchema = new mongoose.Schema({
   },
   issuedAt: { type: Date, required: true, immutable: true },
   tokenVersion: { type: Number, required: true, min: 0, immutable: true },
+  clientPlatform: { type: String, enum: ['web', 'android'], default: 'web', required: true, immutable: true },
   accessJti: { type: String, required: true, immutable: true, select: false },
   refreshJti: { type: String, required: true, immutable: true, select: false },
   accessExpiresAt: { type: Date, required: true, immutable: true },

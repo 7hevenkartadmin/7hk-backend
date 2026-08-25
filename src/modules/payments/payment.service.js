@@ -16,6 +16,12 @@ import { PaymentIntent } from './paymentIntent.model.js';
 import { findOwnedAddress } from '../addresses/address.service.js';
 import { Payment } from './payment.model.js';
 import { assertOnlinePaymentAllowed } from './payment-policy.js';
+import {
+  androidVisiblePaymentIntentFilter,
+  assertNoPaanCornerItems,
+  combineMongoFilters,
+  paanCornerProductExclusion,
+} from '../catalog/paanCorner.visibility.js';
 
 export const CHECKOUT_TTL_MS = 15 * 60 * 1000;
 export const CAPTURED_RESERVATION_GRACE_MS = 30 * 60 * 1000;
@@ -145,9 +151,10 @@ export async function createPaymentForOrder(order, session) {
   throw new AppError('Online payments must use a verified checkout session', 409, 'PAYMENT_SESSION_REQUIRED');
 }
 
-async function hydrateCheckoutItems(inputItems) {
+async function hydrateCheckoutItems(inputItems, { excludePaanCorner = false } = {}) {
   const ids = inputItems.map((item) => item.productId);
-  const query = Product.find({ _id: { $in: ids }, isActive: true });
+  const visibility = excludePaanCorner ? await paanCornerProductExclusion() : null;
+  const query = Product.find(combineMongoFilters({ _id: { $in: ids }, isActive: true }, visibility));
   if (typeof query.populate === 'function') query.populate('categoryRef', 'name slug');
   const products = await query;
   const byId = new Map(products.map((product) => [String(product._id), product]));
@@ -311,12 +318,19 @@ export function shouldInitializeProvider(createdIntent, intent) {
   return createdIntent === true && intent?.status === 'initializing';
 }
 
-export async function createRazorpayCheckoutSession(payload, customer, idempotencyKey) {
+function assertAndroidVisiblePaymentIntent(intent, excludePaanCorner) {
+  if (excludePaanCorner) assertNoPaanCornerItems(intent?.checkoutSnapshot?.items || []);
+  return intent;
+}
+
+export async function createRazorpayCheckoutSession(payload, customer, idempotencyKey, { excludePaanCorner = false } = {}) {
   const requestCartHash = createCartHash(payload.items, payload.couponCode, 0, payload.addressId, payload.slotId);
   const activeDedupeKey = dedupeKey(customer._id, requestCartHash);
-  let existing = await PaymentIntent.findOne({ user: customer._id, idempotencyKey });
-  if (!existing) existing = await PaymentIntent.findOne({ activeDedupeKey });
+  const visibility = excludePaanCorner ? androidVisiblePaymentIntentFilter() : null;
+  let existing = await PaymentIntent.findOne(combineMongoFilters({ user: customer._id, idempotencyKey }, visibility));
+  if (!existing) existing = await PaymentIntent.findOne(combineMongoFilters({ activeDedupeKey }, visibility));
   if (existing) {
+    assertAndroidVisiblePaymentIntent(existing, excludePaanCorner);
     assertOnlinePaymentAllowed(existing.checkoutSnapshot?.items || []);
     const existingTotal = existing.checkoutSnapshot?.totals?.total;
     const expected = {
@@ -328,19 +342,26 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
     return toCheckoutPaymentSession(await reusableIntent(existing, expected));
   }
 
-  const activeSessions = await PaymentIntent.countDocuments({
+  const activeSessions = await PaymentIntent.countDocuments(combineMongoFilters({
     user: customer._id,
     status: { $in: ['initializing', 'created', 'authorized', 'verified', 'processing'] },
     'reservation.state': { $in: ['held', 'consuming'] },
-  });
+  }, visibility));
   if (activeSessions >= MAX_ACTIVE_PAYMENT_SESSIONS_PER_CUSTOMER) {
     throw new AppError('Too many active payment sessions. Resume or abandon an existing checkout before starting another.', 429, 'PAYMENT_SESSION_LIMIT');
   }
 
-  const items = await hydrateCheckoutItems(payload.items);
+  const items = await hydrateCheckoutItems(payload.items, { excludePaanCorner });
+  if (excludePaanCorner) assertNoPaanCornerItems(items);
   assertOnlinePaymentAllowed(items);
   const subtotalOnly = calculateCartTotals({ items }).subtotal;
-  const { coupon, discount } = await validateCoupon(payload.couponCode, subtotalOnly, customer._id);
+  const { coupon, discount } = await validateCoupon(
+    payload.couponCode,
+    subtotalOnly,
+    customer._id,
+    undefined,
+    { excludePaanCorner },
+  );
   const address = await findOwnedAddress(customer._id, payload.addressId);
   if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   const deliveryAddress = paymentDeliveryAddressSnapshot(address);
@@ -370,7 +391,10 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
   try {
     await session.withTransaction(async () => {
       createdIntent = false;
-      const duplicateQuery = PaymentIntent.findOne({ $or: [{ user: customer._id, idempotencyKey }, { activeDedupeKey }] });
+      const duplicateQuery = PaymentIntent.findOne(combineMongoFilters(
+        { $or: [{ user: customer._id, idempotencyKey }, { activeDedupeKey }] },
+        visibility,
+      ));
       duplicateQuery.session(session);
       const duplicate = await duplicateQuery;
       if (duplicate) {
@@ -424,12 +448,16 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
     });
   } catch (error) {
     if (error?.code !== 11000) throw error;
-    intent = await PaymentIntent.findOne({ $or: [{ user: customer._id, idempotencyKey }, { activeDedupeKey }] });
+    intent = await PaymentIntent.findOne(combineMongoFilters(
+      { $or: [{ user: customer._id, idempotencyKey }, { activeDedupeKey }] },
+      visibility,
+    ));
     if (!intent) throw error;
   } finally {
     await session.endSession();
   }
   if (!shouldInitializeProvider(createdIntent, intent)) {
+    assertAndroidVisiblePaymentIntent(intent, excludePaanCorner);
     return toCheckoutPaymentSession(await reusableIntent(intent, expected));
   }
   return toCheckoutPaymentSession(await initializeProviderOrder(intent));
@@ -476,7 +504,7 @@ async function remainingRefundPaise(intent, orderId, session) {
   return Math.max(0, Number(intent.amountPaise) - Number(intent.amountRefundedPaise || 0));
 }
 
-async function queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld }, session) {
+async function queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld, maxTotalRefundPaise }, session) {
   const query = PaymentIntent.findOne({
     _id: intentId,
     ...(orderId ? { order: orderId } : {}),
@@ -486,7 +514,16 @@ async function queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld
   const intent = await query;
   if (!intent) return null;
 
-  const amountPaise = await remainingRefundPaise(intent, orderId, session);
+  const refundableRemainingPaise = await remainingRefundPaise(intent, orderId, session);
+  const paidAmountPaise = Number(intent.amountPaise);
+  const alreadyRefundedPaise = Math.max(0, paidAmountPaise - refundableRemainingPaise);
+  const refundTargetPaise = maxTotalRefundPaise === undefined
+    ? paidAmountPaise
+    : Math.max(0, Math.min(paidAmountPaise, Math.round(Number(maxTotalRefundPaise))));
+  const amountPaise = Math.min(
+    refundableRemainingPaise,
+    Math.max(0, refundTargetPaise - alreadyRefundedPaise),
+  );
   if (orderId) {
     await Payment.updateOne(
       { order: orderId, provider: 'razorpay' },
@@ -496,6 +533,7 @@ async function queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld
   }
   const activeProviderRefund = Boolean(intent.refundId && !['processed', 'failed'].includes(intent.refundStatus));
   intent.refundReason = reasonCode;
+  intent.refundTargetPaise = refundTargetPaise;
   intent.failureCode = undefined;
 
   if (amountPaise === 0) {
@@ -506,8 +544,8 @@ async function queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld
     if (orderId) {
       const { Order } = await import('../orders/order.model.js');
       await Order.updateOne(
-        { _id: orderId, paymentStatus: { $ne: 'refunded' } },
-        { $set: { paymentStatus: 'refunded' } },
+        { _id: orderId, paymentStatus: { $nin: ['refunded', 'partially_refunded'] } },
+        { $set: { paymentStatus: refundTargetPaise >= paidAmountPaise ? 'refunded' : 'partially_refunded' } },
         { session },
       );
     }
@@ -530,13 +568,15 @@ async function queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld
   return intent;
 }
 
-async function queuePaymentIntentRefund(intentId, reasonCode, { orderId, releaseHeld = false, session } = {}) {
-  if (session) return queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld }, session);
+async function queuePaymentIntentRefund(intentId, reasonCode, {
+  orderId, releaseHeld = false, session, maxTotalRefundPaise,
+} = {}) {
+  if (session) return queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld, maxTotalRefundPaise }, session);
   const ownSession = await mongoose.startSession();
   let queued;
   try {
     await ownSession.withTransaction(async () => {
-      queued = await queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld }, ownSession);
+      queued = await queueRefundInSession({ intentId, orderId, reasonCode, releaseHeld, maxTotalRefundPaise }, ownSession);
     });
     return queued;
   } finally {
@@ -544,14 +584,20 @@ async function queuePaymentIntentRefund(intentId, reasonCode, { orderId, release
   }
 }
 
-export async function queueOrderRefund(order, reasonCode = 'ORDER_CANCELLED', session) {
+export async function queueOrderRefund(order, reasonCode = 'ORDER_CANCELLED', session, { maxTotalRefundPaise } = {}) {
   if (order.paymentMethod !== 'razorpay' || order.paymentStatus === 'refunded') return null;
   const queued = await queuePaymentIntentRefund(order.paymentIntent, reasonCode, {
     orderId: order._id,
     releaseHeld: false,
     session,
+    maxTotalRefundPaise,
   });
-  if (queued?.status === 'refunded') order.paymentStatus = 'refunded';
+  if (queued?.status === 'refunded') {
+    const refundTargetPaise = Number(queued.refundTargetPaise ?? queued.amountPaise);
+    order.paymentStatus = refundTargetPaise >= Number(queued.amountPaise)
+      ? 'refunded'
+      : 'partially_refunded';
+  }
   return queued;
 }
 
@@ -764,15 +810,19 @@ async function fetchProviderPayment(paymentId) {
   }
 }
 
-async function findCustomerIntent(customer, { paymentSessionId }) {
+async function findCustomerIntent(customer, { paymentSessionId }, { excludePaanCorner = false } = {}) {
   if (!paymentSessionId) throw new AppError('Invalid payment session ID', 422, 'PAYMENT_SESSION_ID_INVALID');
-  const intent = await PaymentIntent.findOne({ _id: paymentSessionId, user: customer._id });
+  const intent = await PaymentIntent.findOne(combineMongoFilters(
+    { _id: paymentSessionId, user: customer._id },
+    excludePaanCorner ? androidVisiblePaymentIntentFilter() : null,
+  ));
   if (!intent) throw new AppError('Payment session not found', 404, 'PAYMENT_INTENT_NOT_FOUND');
   return intent;
 }
 
-export async function verifyRazorpayPayment(payload, customer) {
-  const intent = await findCustomerIntent(customer, payload);
+export async function verifyRazorpayPayment(payload, customer, { excludePaanCorner = false } = {}) {
+  const intent = await findCustomerIntent(customer, payload, { excludePaanCorner });
+  assertAndroidVisiblePaymentIntent(intent, excludePaanCorner);
   assertOnlinePaymentAllowed(intent.checkoutSnapshot?.items || []);
   verifyRazorpaySignature(payload, intent.providerOrderId);
   if (['verified', 'consumed', 'refund_pending', 'refunded', 'refund_failed'].includes(intent.status)) return toCheckoutPaymentSession(intent);
@@ -808,18 +858,22 @@ async function reconcileIntentFromProvider(intent) {
   return markIntentFromPayment(intent, payment);
 }
 
-export async function reconcileRazorpayPaymentSession(sessionId, customer) {
-  const intent = await findCustomerIntent(customer, { paymentSessionId: sessionId });
+export async function reconcileRazorpayPaymentSession(sessionId, customer, { excludePaanCorner = false } = {}) {
+  const intent = await findCustomerIntent(customer, { paymentSessionId: sessionId }, { excludePaanCorner });
+  assertAndroidVisiblePaymentIntent(intent, excludePaanCorner);
   assertOnlinePaymentAllowed(intent.checkoutSnapshot?.items || []);
   return toCheckoutPaymentSession(await reconcileIntentFromProvider(intent));
 }
 
-export async function getPaymentSession(sessionId, customer) {
-  return toCheckoutPaymentSession(await findCustomerIntent(customer, { paymentSessionId: sessionId }));
+export async function getPaymentSession(sessionId, customer, { excludePaanCorner = false } = {}) {
+  const intent = await findCustomerIntent(customer, { paymentSessionId: sessionId }, { excludePaanCorner });
+  assertAndroidVisiblePaymentIntent(intent, excludePaanCorner);
+  return toCheckoutPaymentSession(intent);
 }
 
-export async function abandonRazorpayPaymentSession(sessionId, customer) {
-  let intent = await findCustomerIntent(customer, { paymentSessionId: sessionId });
+export async function abandonRazorpayPaymentSession(sessionId, customer, { excludePaanCorner = false } = {}) {
+  let intent = await findCustomerIntent(customer, { paymentSessionId: sessionId }, { excludePaanCorner });
+  assertAndroidVisiblePaymentIntent(intent, excludePaanCorner);
   if (intent.status === 'created') intent = await reconcileIntentFromProvider(intent);
 
   if (intent.status === 'failed' && intent.failureCode === 'CLIENT_ABANDONED' && intent.reservation?.state === 'released') {
@@ -857,7 +911,7 @@ export async function abandonRazorpayPaymentSession(sessionId, customer) {
   }
 
   if (!abandoned) {
-    const current = await findCustomerIntent(customer, { paymentSessionId: sessionId });
+    const current = await findCustomerIntent(customer, { paymentSessionId: sessionId }, { excludePaanCorner });
     if (current.status === 'failed' && current.failureCode === 'CLIENT_ABANDONED' && current.reservation?.state === 'released') {
       return toCheckoutPaymentSession(current);
     }
@@ -1057,7 +1111,9 @@ export async function applyRazorpayRefund(refund, eventType) {
     if (!intent) return null;
 
     const fullyRefunded = Number(intent.amountRefundedPaise || 0) >= Number(intent.amountPaise);
-    if (fullyRefunded) {
+    const refundTargetPaise = Number(intent.refundTargetPaise ?? intent.amountPaise);
+    const refundTargetReached = Number(intent.amountRefundedPaise || 0) >= refundTargetPaise;
+    if (refundTargetReached) {
       const session = await mongoose.startSession();
       try {
         await session.withTransaction(async () => {
@@ -1096,13 +1152,16 @@ export async function applyRazorpayRefund(refund, eventType) {
     $or: [{ providerPaymentId: refund.payment_id }, { verifiedPaymentId: refund.payment_id }],
   });
   if (intent) {
+    const refundedPaise = Math.round(Number(payment.amountRefunded || 0) * 100);
+    const refundTargetPaise = Number(intent.refundTargetPaise ?? intent.amountPaise);
+    const refundTargetReached = refundedPaise >= refundTargetPaise;
     const update = {
       providerStatus: payment.status,
       refundId: refund.id,
       refundStatus: refund.status,
     };
     const unset = {};
-    if (fullyRefunded) {
+    if (refundTargetReached) {
       update.status = 'refunded';
       update.refundAmountPaise = 0;
       unset.activeDedupeKey = 1;
@@ -1120,7 +1179,7 @@ export async function applyRazorpayRefund(refund, eventType) {
       unset.nextRefundAttemptAt = 1;
     }
     await PaymentIntent.updateOne(
-      fullyRefunded ? { _id: intent._id } : { _id: intent._id, status: { $ne: 'refunded' } },
+      refundTargetReached ? { _id: intent._id } : { _id: intent._id, status: { $ne: 'refunded' } },
       { $set: update, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
     );
   }
@@ -1151,12 +1210,12 @@ export async function refundUnfulfillablePayment(paymentSessionId, customer, rea
   return refundIntentPayment(queued, reasonCode || 'ORDER_FINALIZATION_FAILED');
 }
 
-export async function initiateOrderRefund(order, reasonCode = 'ORDER_CANCELLED') {
+export async function initiateOrderRefund(order, reasonCode = 'ORDER_CANCELLED', { maxTotalRefundPaise } = {}) {
   if (order.paymentMethod !== 'razorpay' || order.paymentStatus === 'refunded') return null;
   let intent = await PaymentIntent.findOne({ _id: order.paymentIntent, order: order._id });
   if (!intent) throw new AppError('Payment intent for refund was not found', 409, 'PAYMENT_INTENT_NOT_FOUND');
   if (!['refund_pending', 'refund_failed'].includes(intent.status)) {
-    intent = await queueOrderRefund(order, reasonCode);
+    intent = await queueOrderRefund(order, reasonCode, undefined, { maxTotalRefundPaise });
   }
   if (!intent || intent.status === 'refunded') return intent;
   return refundIntentPayment(intent, reasonCode);

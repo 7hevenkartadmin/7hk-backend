@@ -4,6 +4,7 @@ import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { validate } from '../../shared/validation/validate.js';
 import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { audit } from '../audit/audit.service.js';
+import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
 import { customerOrderActionRateLimiter, deliveryOtpRateLimiter } from '../../shared/middlewares/rateLimiters.js';
 import { createOrderSchema, customerCancelOrderSchema, quoteOrderSchema, updateStatusSchema, verifyDeliveryOtpSchema } from './order.validation.js';
 import { cancelCustomerOrder, createOrder, getOrderForCustomer, listCustomerOrders, quoteOrder, updateOrderStatus, verifyDeliveryOtp } from './order.service.js';
@@ -15,15 +16,15 @@ export const orderRoutes = Router();
 orderRoutes.use(requireAuth);
 
 orderRoutes.post('/quote', authorize('customer'), validate(quoteOrderSchema), asyncHandler(async (req, res) => {
-  ok(res, await quoteOrder(req.user, req.body), 'Order quote calculated');
+  ok(res, await quoteOrder(req.user, req.body, { excludePaanCorner: isAndroidRequest(req) }), 'Order quote calculated');
 }));
 
 orderRoutes.post('/', authorize('customer'), validate(createOrderSchema), asyncHandler(async (req, res) => {
-  created(res, await createOrder(req.user, req.body), 'Order placed');
+  created(res, await createOrder(req.user, req.body, { excludePaanCorner: isAndroidRequest(req) }), 'Order placed');
 }));
 
 orderRoutes.post('/:id/cancel', authorize('customer'), customerOrderActionRateLimiter, validate(customerCancelOrderSchema), asyncHandler(async (req, res) => {
-  const order = await cancelCustomerOrder(req.params.id, req.body.reason, req.user);
+  const order = await cancelCustomerOrder(req.params.id, req.body.reason, req.user, { excludePaanCorner: isAndroidRequest(req) });
   ok(res, { order }, 'Order cancelled');
 }));
 
@@ -37,11 +38,11 @@ orderRoutes.post('/admin/:id/verify-delivery-otp', authorize('admin', 'manager',
 }));
 
 orderRoutes.get('/me', authorize('customer'), asyncHandler(async (req, res) => {
-  ok(res, { orders: await listCustomerOrders(req.user._id) }, 'Orders loaded');
+  ok(res, { orders: await listCustomerOrders(req.user._id, { excludePaanCorner: isAndroidRequest(req) }) }, 'Orders loaded');
 }));
 
 orderRoutes.get('/:idOrNumber', authorize('customer'), asyncHandler(async (req, res) => {
-  ok(res, { order: await getOrderForCustomer(req.params.idOrNumber, req.user) }, 'Order loaded');
+  ok(res, { order: await getOrderForCustomer(req.params.idOrNumber, req.user, { excludePaanCorner: isAndroidRequest(req) }) }, 'Order loaded');
 }));
 
 orderRoutes.patch('/:id/status', authorize('admin', 'manager', 'support'), validate(updateStatusSchema), asyncHandler(async (req, res) => {
@@ -52,7 +53,7 @@ orderRoutes.patch('/:id/status', authorize('admin', 'manager', 'support'), valid
 }));
 
 orderRoutes.get('/:id/invoice', authorize('customer'), asyncHandler(async (req, res) => {
-  const order = await getOrderForCustomer(req.params.id, req.user);
+  const order = await getOrderForCustomer(req.params.id, req.user, { excludePaanCorner: isAndroidRequest(req) });
   streamInvoicePdf(order, res);
 }));
 

@@ -8,6 +8,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { createRazorpayOrderSchema, idempotencyKeySchema, paymentSessionIdSchema, verifyPaymentSchema } from './payment.validation.js';
 import { abandonRazorpayPaymentSession, createRazorpayCheckoutSession, getPaymentSession, reconcileRazorpayPaymentSession, verifyRazorpayPayment } from './payment.service.js';
 import { getRazorpayMethodCatalog } from './paymentMethods.service.js';
+import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
 
 export const paymentRoutes = Router();
 
@@ -18,27 +19,27 @@ paymentRoutes.get('/razorpay/methods', requireAuth, authorize('customer'), payme
 paymentRoutes.post('/razorpay/order', requireAuth, authorize('customer'), paymentCreationRateLimiter, validate(createRazorpayOrderSchema), asyncHandler(async (req, res) => {
   const parsedKey = idempotencyKeySchema.safeParse(req.headers['idempotency-key']);
   if (!parsedKey.success) throw new AppError('A valid Idempotency-Key header is required', 422, 'IDEMPOTENCY_KEY_REQUIRED');
-  ok(res, { payment: await createRazorpayCheckoutSession(req.body, req.user, parsedKey.data) }, 'Razorpay checkout session ready');
+  ok(res, { payment: await createRazorpayCheckoutSession(req.body, req.user, parsedKey.data, { excludePaanCorner: isAndroidRequest(req) }) }, 'Razorpay checkout session ready');
 }));
 
 paymentRoutes.post('/razorpay/verify', requireAuth, authorize('customer'), paymentRateLimiter, validate(verifyPaymentSchema), asyncHandler(async (req, res) => {
-  ok(res, { payment: await verifyRazorpayPayment(req.body, req.user) }, 'Payment verified');
+  ok(res, { payment: await verifyRazorpayPayment(req.body, req.user, { excludePaanCorner: isAndroidRequest(req) }) }, 'Payment verified');
 }));
 
 paymentRoutes.get('/razorpay/sessions/:id', requireAuth, authorize('customer'), paymentRateLimiter, asyncHandler(async (req, res) => {
   const parsedId = paymentSessionIdSchema.safeParse(req.params.id);
   if (!parsedId.success) throw new AppError('Invalid payment session ID', 422, 'PAYMENT_SESSION_ID_INVALID');
-  ok(res, { payment: await getPaymentSession(parsedId.data, req.user) }, 'Payment session loaded');
+  ok(res, { payment: await getPaymentSession(parsedId.data, req.user, { excludePaanCorner: isAndroidRequest(req) }) }, 'Payment session loaded');
 }));
 
 paymentRoutes.post('/razorpay/sessions/:id/reconcile', requireAuth, authorize('customer'), paymentRateLimiter, asyncHandler(async (req, res) => {
   const parsedId = paymentSessionIdSchema.safeParse(req.params.id);
   if (!parsedId.success) throw new AppError('Invalid payment session ID', 422, 'PAYMENT_SESSION_ID_INVALID');
-  ok(res, { payment: await reconcileRazorpayPaymentSession(parsedId.data, req.user) }, 'Payment session reconciled');
+  ok(res, { payment: await reconcileRazorpayPaymentSession(parsedId.data, req.user, { excludePaanCorner: isAndroidRequest(req) }) }, 'Payment session reconciled');
 }));
 
 paymentRoutes.post('/razorpay/sessions/:id/abandon', requireAuth, authorize('customer'), paymentRateLimiter, asyncHandler(async (req, res) => {
   const parsedId = paymentSessionIdSchema.safeParse(req.params.id);
   if (!parsedId.success) throw new AppError('Invalid payment session ID', 422, 'PAYMENT_SESSION_ID_INVALID');
-  ok(res, { payment: await abandonRazorpayPaymentSession(parsedId.data, req.user) }, 'Unpaid payment session abandoned');
+  ok(res, { payment: await abandonRazorpayPaymentSession(parsedId.data, req.user, { excludePaanCorner: isAndroidRequest(req) }) }, 'Unpaid payment session abandoned');
 }));
