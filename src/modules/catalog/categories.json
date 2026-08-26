@@ -4,7 +4,7 @@
     "slug": "biscuits-cookies",
     "description": "Biscuits, cookies, crackers, digestive biscuits and rusks.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1771667792511-375.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738316/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1771667792511-375-2d87143f99cc7970b123.webp",
     "parent": null,
     "isActive": true,
     "sortOrder": 1,
@@ -14,7 +14,7 @@
         "slug": "sweet-biscuits",
         "description": "Classic sweet and everyday tea-time biscuits.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1771667792511-375.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738316/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1771667792511-375-2d87143f99cc7970b123.webp",
         "isActive": true,
         "sortOrder": 1
       },
@@ -23,7 +23,7 @@
         "slug": "cream-sandwich-biscuits",
         "description": "Cream-filled, sandwich and indulgent biscuits.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/f7e5b620-6e24-4dd9-9071-22197132ceb8.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738301/7hevenkart/catalog/migrated/cdn-grofers-com/f7e5b620-6e24-4dd9-9071-22197132ceb8-1b924f6fb20cf7031c54.webp",
         "isActive": true,
         "sortOrder": 2
       },
@@ -32,7 +32,7 @@
         "slug": "digestive-health-biscuits",
         "description": "Digestive, high-fibre and health-positioned biscuits.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/210d83ef-3c34-4b4f-ac14-d4a273b1bda8.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738225/7hevenkart/catalog/migrated/cdn-grofers-com/210d83ef-3c34-4b4f-ac14-d4a273b1bda8-b967798376c524f1fc77.webp",
         "isActive": true,
         "sortOrder": 3
       },
@@ -41,7 +41,7 @@
         "slug": "crackers-savoury-biscuits",
         "description": "Salted, jeera, ajwain, herb and other savoury biscuits.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1773811093462-72.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738354/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1773811093462-72-e8c38e1b55dd53653dda.webp",
         "isActive": true,
         "sortOrder": 4
       },
@@ -50,7 +50,7 @@
         "slug": "rusks-toast",
         "description": "Packaged rusks, toast and crisp baked products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1777465439545-25.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738374/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1777465439545-25-1dac94d75e92d4954a1d.webp",
         "isActive": true,
         "sortOrder": 5
       }
@@ -61,7 +61,7 @@
     "slug": "dry-fruits-nuts-seeds",
     "description": "Nuts, dried fruits, dates, seeds, makhana and trail mixes.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1775721352613-43.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738364/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1775721352613-43-b2a9f84e31bed905cff9.webp",
     "parent": null,
     "isActive": true,
     "sortOrder": 2,
@@ -71,7 +71,7 @@
         "slug": "almonds-walnuts",
         "description": "Packaged almonds and walnuts.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1775721352613-43.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738364/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1775721352613-43-b2a9f84e31bed905cff9.webp",
         "isActive": true,
         "sortOrder": 1
       },
@@ -80,7 +80,7 @@
         "slug": "cashews-pistachios",
         "description": "Plain, roasted, salted and flavoured cashews and pistachios.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1775721352613-43.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738364/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1775721352613-43-b2a9f84e31bed905cff9.webp",
         "isActive": true,
         "sortOrder": 2
       },
@@ -89,7 +89,7 @@
         "slug": "raisins-dried-fruits",
         "description": "Raisins and other packaged dried fruits.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1779436000182-406.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738403/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1779436000182-406-1722e9752cbc8264e866.webp",
         "isActive": true,
         "sortOrder": 3
       },
@@ -98,7 +98,7 @@
         "slug": "dates-anjeer",
         "description": "Packaged dates, anjeer and similar dried premium products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/9a25be01-92ee-4ceb-953c-a6042ca29d85.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738269/7hevenkart/catalog/migrated/cdn-grofers-com/9a25be01-92ee-4ceb-953c-a6042ca29d85-6866e9ead96f7ea20b89.webp",
         "isActive": true,
         "sortOrder": 4
       },
@@ -107,7 +107,7 @@
         "slug": "seeds-trail-mix",
         "description": "Chia, pumpkin, sunflower, mixed seeds and trail mixes.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1783917437156-12.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738441/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1783917437156-12-7f360cd19dd553fc7e68.webp",
         "isActive": true,
         "sortOrder": 5
       },
@@ -116,7 +116,7 @@
         "slug": "makhana",
         "description": "Plain and flavoured packaged makhana.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1773806551319-616.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738353/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1773806551319-616-a587ad006902e14bccef.webp",
         "isActive": true,
         "sortOrder": 6
       }
@@ -127,7 +127,7 @@
     "slug": "snacks-namkeen",
     "description": "Bhujia, namkeen, chips, dal snacks and ready-to-eat savouries.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1777953701494-9321.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738381/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1777953701494-9321-b153c285089ce569c401.webp",
     "parent": null,
     "isActive": true,
     "sortOrder": 3,
@@ -137,7 +137,7 @@
         "slug": "bhujia-sev",
         "description": "Bikaneri bhujia, aloo bhujia, sev and related snacks.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1777953701494-9321.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738381/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1777953701494-9321-b153c285089ce569c401.webp",
         "isActive": true,
         "sortOrder": 1
       },
@@ -146,7 +146,7 @@
         "slug": "mixtures-namkeen",
         "description": "Mixed namkeen, masala mixtures and traditional savoury mixes.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1771214347138-1480.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738315/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1771214347138-1480-75a955ac561b1b4da0ac.webp",
         "isActive": true,
         "sortOrder": 2
       },
@@ -155,7 +155,7 @@
         "slug": "chips-crisps",
         "description": "Potato, banana and other packaged chips and crisps.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1773723048630-68.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738352/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1773723048630-68-9912f4b579f6920d52ac.webp",
         "isActive": true,
         "sortOrder": 3
       },
@@ -164,7 +164,7 @@
         "slug": "dal-nut-snacks",
         "description": "Moong dal, nut crackers and similar crunchy snacks.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1770963085463-92.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738308/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1770963085463-92-305657cda897d1b1432a.webp",
         "isActive": true,
         "sortOrder": 4
       },
@@ -173,7 +173,7 @@
         "slug": "soya-extruded-snacks",
         "description": "Soya sticks and other extruded savoury snacks.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1781062614735-78.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738431/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1781062614735-78-dbc0ec840444fcf43cba.webp",
         "isActive": true,
         "sortOrder": 5
       },
@@ -182,7 +182,7 @@
         "slug": "ready-to-eat-savouries",
         "description": "Kachori, bhelpuri mixes and other packaged savouries.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1777953701494-9768.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738382/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1777953701494-9768-8ce4f260abdfd0049770.webp",
         "isActive": true,
         "sortOrder": 6
       }
@@ -193,7 +193,7 @@
     "slug": "breakfast-instant-foods",
     "description": "Noodles, pasta, cereals, oats, vermicelli and quick-preparation foods.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1779767007480-279.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738405/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1779767007480-279-7b013494865df72b8779.webp",
     "parent": null,
     "isActive": true,
     "sortOrder": 4,
@@ -203,7 +203,7 @@
         "slug": "instant-noodles",
         "description": "Instant noodles and chowmein products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1779767007480-279.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738405/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1779767007480-279-7b013494865df72b8779.webp",
         "isActive": true,
         "sortOrder": 1
       },
@@ -212,7 +212,7 @@
         "slug": "pasta-macaroni",
         "description": "Penne, fusilli, macaroni and other packaged pasta.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780329263464-82.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738414/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1780329263464-82-e8363ee8021adff15a1b.webp",
         "isActive": true,
         "sortOrder": 2
       },
@@ -259,7 +259,7 @@
     "slug": "atta-rice-dal",
     "description": "Everyday staples including atta, rice, dal, pulses, grains and flours.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/7abb5903-16e3-4b30-97ed-3fdf4156254b.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738258/7hevenkart/catalog/migrated/cdn-grofers-com/7abb5903-16e3-4b30-97ed-3fdf4156254b-237293780660d0d77ab0.webp",
     "parent": null,
     "isActive": true,
     "sortOrder": 5,
@@ -269,7 +269,7 @@
         "slug": "atta-wheat-flour",
         "description": "Whole-wheat atta and wheat flour products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/7abb5903-16e3-4b30-97ed-3fdf4156254b.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738258/7hevenkart/catalog/migrated/cdn-grofers-com/7abb5903-16e3-4b30-97ed-3fdf4156254b-237293780660d0d77ab0.webp",
         "isActive": true,
         "sortOrder": 1
       },
@@ -278,7 +278,7 @@
         "slug": "rice-basmati-rice",
         "description": "Everyday rice, basmati rice and specialty rice.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/94e1f113-eace-4e78-a518-13c1684b8fb0.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738268/7hevenkart/catalog/migrated/cdn-grofers-com/94e1f113-eace-4e78-a518-13c1684b8fb0-1f14676404e61cfbdf34.webp",
         "isActive": true,
         "sortOrder": 2
       },
@@ -287,7 +287,7 @@
         "slug": "dal-pulses",
         "description": "Everyday dals, lentils and packaged pulses.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/216b56d4-08de-47f3-9e7b-291e8530ad6a.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738226/7hevenkart/catalog/migrated/cdn-grofers-com/216b56d4-08de-47f3-9e7b-291e8530ad6a-6799bee709b230eff448.webp",
         "isActive": true,
         "sortOrder": 3
       },
@@ -296,7 +296,7 @@
         "slug": "besan-other-flours",
         "description": "Besan and other commonly used packaged flours.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/204dd7110f9e41f8bd00b2bafdeff3ee.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738225/7hevenkart/catalog/migrated/cdn-grofers-com/204dd7110f9e41f8bd00b2bafdeff3ee-e09257dba499d0b984e5.webp",
         "isActive": true,
         "sortOrder": 4
       },
@@ -305,7 +305,7 @@
         "slug": "grains-millets",
         "description": "Packaged whole grains, millets and related staples.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/b26abd9e-edfa-402b-a9ad-dbb8af16e5e0.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738277/7hevenkart/catalog/migrated/cdn-grofers-com/b26abd9e-edfa-402b-a9ad-dbb8af16e5e0-957381413c4481697478.webp",
         "isActive": true,
         "sortOrder": 5
       }
@@ -316,7 +316,7 @@
     "slug": "masala-spreads-pickles",
     "description": "Spices, masalas, sauces, chutneys, jams, spreads and pickles.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/ff0b08eb-fc0c-4c3e-8442-d34db51da134.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738309/7hevenkart/catalog/migrated/cdn-grofers-com/ff0b08eb-fc0c-4c3e-8442-d34db51da134-ebce928e53cccde81f28.png",
     "parent": null,
     "isActive": true,
     "sortOrder": 6,
@@ -326,7 +326,7 @@
         "slug": "ground-spices",
         "description": "Single ground spices such as chilli, turmeric and coriander powder.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/ff0b08eb-fc0c-4c3e-8442-d34db51da134.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738309/7hevenkart/catalog/migrated/cdn-grofers-com/ff0b08eb-fc0c-4c3e-8442-d34db51da134-ebce928e53cccde81f28.png",
         "isActive": true,
         "sortOrder": 1
       },
@@ -335,7 +335,7 @@
         "slug": "blended-masalas",
         "description": "Chaat masala and other blended spice mixes.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/be7427bd-fc44-406d-b3e6-c9d20c52f986.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738282/7hevenkart/catalog/migrated/cdn-grofers-com/be7427bd-fc44-406d-b3e6-c9d20c52f986-ff471c25852b294ac0d3.png",
         "isActive": true,
         "sortOrder": 2
       },
@@ -344,7 +344,7 @@
         "slug": "ketchup-sauces",
         "description": "Tomato ketchup, chilli sauce, soya sauce, pasta sauce and similar condiments.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/8d68dd16-5a0c-4c22-806a-d7871a86941f.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738267/7hevenkart/catalog/migrated/cdn-grofers-com/8d68dd16-5a0c-4c22-806a-d7871a86941f-cdecfe697d97911794cf.png",
         "isActive": true,
         "sortOrder": 3
       },
@@ -353,7 +353,7 @@
         "slug": "chutneys-dips",
         "description": "Schezwan chutney and other packaged chutneys and dips.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780638810587-232.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738430/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1780638810587-232-48e07e784de96b6f9b84.webp",
         "isActive": true,
         "sortOrder": 4
       },
@@ -362,7 +362,7 @@
         "slug": "jams-spreads",
         "description": "Fruit jams and other packaged spreads.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/5e3c91b8-cc08-42b8-b7c5-872738bd614d.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738247/7hevenkart/catalog/migrated/cdn-grofers-com/5e3c91b8-cc08-42b8-b7c5-872738bd614d-9ce94684f0316cb2549a.webp",
         "isActive": true,
         "sortOrder": 5
       },
@@ -371,7 +371,7 @@
         "slug": "pickles",
         "description": "Mango, chilli, mixed, garlic and other packaged pickles.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780638810587-232.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738430/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1780638810587-232-48e07e784de96b6f9b84.webp",
         "isActive": true,
         "sortOrder": 6
       }
@@ -382,7 +382,7 @@
     "slug": "beverages-wellness",
     "description": "Coffee, drink mixes, health drinks and packaged wellness products.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1782447188914-4.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738433/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1782447188914-4-aa7b77ae53ec4486eacb.webp",
     "parent": null,
     "isActive": true,
     "sortOrder": 7,
@@ -392,7 +392,7 @@
         "slug": "coffee",
         "description": "Instant coffee and related coffee products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1782447188914-4.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738433/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1782447188914-4-aa7b77ae53ec4486eacb.webp",
         "isActive": true,
         "sortOrder": 1
       },
@@ -410,7 +410,7 @@
         "slug": "glucose-energy-drinks",
         "description": "Glucose powders and powdered energy drink mixes.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1775716967350-134.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738364/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1775716967350-134-2d529831c68d9f048593.webp",
         "isActive": true,
         "sortOrder": 3
       },
@@ -419,7 +419,7 @@
         "slug": "health-drink-powders",
         "description": "Nutrition and health drink powders for general consumption.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1786420113452-1266.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738457/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1786420113452-1266-b5bb8025e4c132358018.webp",
         "isActive": true,
         "sortOrder": 4
       },
@@ -428,7 +428,7 @@
         "slug": "chyawanprash-immunity",
         "description": "Chyawanprash and related packaged wellness products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1786354100193-169.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738457/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1786354100193-169-fcb30bc2b08fab8472a5.webp",
         "isActive": true,
         "sortOrder": 5
       },
@@ -437,7 +437,7 @@
         "slug": "sugar-free-special-nutrition",
         "description": "Sugar-free and special-purpose packaged nutrition products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/7abb5903-16e3-4b30-97ed-3fdf4156254b.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738258/7hevenkart/catalog/migrated/cdn-grofers-com/7abb5903-16e3-4b30-97ed-3fdf4156254b-237293780660d0d77ab0.webp",
         "isActive": true,
         "sortOrder": 6
       }
@@ -448,7 +448,7 @@
     "slug": "baby-mother-nutrition",
     "description": "Packaged infant, child and mother nutrition products.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/26be904b-8dc7-4a70-8f13-35f02a77afec.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738228/7hevenkart/catalog/migrated/cdn-grofers-com/26be904b-8dc7-4a70-8f13-35f02a77afec-96a1c2c74fcbf3200b41.webp",
     "parent": null,
     "isActive": true,
     "sortOrder": 8,
@@ -476,7 +476,7 @@
         "slug": "growing-up-nutrition",
         "description": "Nutrition products intended for growing children.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/26be904b-8dc7-4a70-8f13-35f02a77afec.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738228/7hevenkart/catalog/migrated/cdn-grofers-com/26be904b-8dc7-4a70-8f13-35f02a77afec-96a1c2c74fcbf3200b41.webp",
         "isActive": true,
         "sortOrder": 3
       },
@@ -494,7 +494,7 @@
         "slug": "specialized-child-nutrition",
         "description": "Other age-specific or specialized packaged nutrition for children.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1786420113452-1266.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738457/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1786420113452-1266-b5bb8025e4c132358018.webp",
         "isActive": true,
         "sortOrder": 5
       }
@@ -505,7 +505,7 @@
     "slug": "personal-care-beauty",
     "description": "Personal grooming, fragrance and skin-care products.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780408599290-43.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738415/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1780408599290-43-4cce4b4f83300bd8e156.webp",
     "parent": null,
     "isActive": true,
     "sortOrder": 9,
@@ -515,7 +515,7 @@
         "slug": "deodorants-body-sprays",
         "description": "Deodorants, body sprays and everyday fragrance products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1780408599290-43.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738415/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1780408599290-43-4cce4b4f83300bd8e156.webp",
         "isActive": true,
         "sortOrder": 1
       },
@@ -524,7 +524,7 @@
         "slug": "face-creams",
         "description": "Daily-use, brightening and beauty face creams.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1773718842673-378.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738352/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1773718842673-378-88a7f3d780d0b87c3b2f.webp",
         "isActive": true,
         "sortOrder": 2
       },
@@ -533,7 +533,7 @@
         "slug": "moisturizers-lotions",
         "description": "Face and body moisturizers, lotions and hydrating products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1770961474120-81.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738307/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1770961474120-81-b97956d18ac1e0181055.webp",
         "isActive": true,
         "sortOrder": 3
       },
@@ -542,7 +542,7 @@
         "slug": "skin-care",
         "description": "Other packaged face and body skin-care products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/422c71b3-fe62-4f0b-878c-aca439d4da57.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738235/7hevenkart/catalog/migrated/cdn-grofers-com/422c71b3-fe62-4f0b-878c-aca439d4da57-2731ebd69ddd27477568.png",
         "isActive": true,
         "sortOrder": 4
       },
@@ -551,7 +551,7 @@
         "slug": "personal-grooming",
         "description": "Other everyday personal grooming and care products.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1774678938546-11.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738354/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1774678938546-11-54afa10e93d217039715.webp",
         "isActive": true,
         "sortOrder": 5
       }
@@ -562,7 +562,7 @@
     "slug": "chocolates-ice-cream",
     "description": "Chocolates, confectionery and packaged ice cream products.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/da/cms-assets/cms/product/1d489c49-8787-4bdf-8d6b-023a30fc2ad1.png",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738224/7hevenkart/catalog/migrated/cdn-grofers-com/1d489c49-8787-4bdf-8d6b-023a30fc2ad1-306d0ec19b497180404e.webp",
     "parent": null,
     "isActive": true,
     "sortOrder": 10,
@@ -572,7 +572,7 @@
         "slug": "chocolate-bars",
         "description": "Regular and premium chocolate bars.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/1d489c49-8787-4bdf-8d6b-023a30fc2ad1.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738224/7hevenkart/catalog/migrated/cdn-grofers-com/1d489c49-8787-4bdf-8d6b-023a30fc2ad1-306d0ec19b497180404e.webp",
         "isActive": true,
         "sortOrder": 1
       },
@@ -581,7 +581,7 @@
         "slug": "chocolate-bites-minis",
         "description": "Mini chocolates, bites and share packs.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/2275c201-13a9-436b-b590-6ed63a775761.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738226/7hevenkart/catalog/migrated/cdn-grofers-com/2275c201-13a9-436b-b590-6ed63a775761-670a72e20ab99ac321c6.png",
         "isActive": true,
         "sortOrder": 2
       },
@@ -590,7 +590,7 @@
         "slug": "candies-toffees",
         "description": "Candies, toffees and related confectionery.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1774871607455-37.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738354/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1774871607455-37-9b45e29c634f514a85fa.webp",
         "isActive": true,
         "sortOrder": 3
       },
@@ -599,7 +599,7 @@
         "slug": "ice-cream-tubs",
         "description": "Family packs, tubs and take-home ice cream.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/rc-upload-1778576673285-601.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738392/7hevenkart/catalog/migrated/cdn-grofers-com/rc-upload-1778576673285-601-b5de5fea075bd36360ed.webp",
         "isActive": true,
         "sortOrder": 4
       },
@@ -608,7 +608,7 @@
         "slug": "ice-cream-cones-cups",
         "description": "Single-serve cones and cups.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/2d2c9c05-37a9-45b2-ad28-8c2b04727d8b.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738230/7hevenkart/catalog/migrated/cdn-grofers-com/2d2c9c05-37a9-45b2-ad28-8c2b04727d8b-f13b19c1940d56ea66c8.webp",
         "isActive": true,
         "sortOrder": 5
       },
@@ -617,7 +617,7 @@
         "slug": "ice-cream-bars-sticks",
         "description": "Single-serve bars, sticks and coated ice cream.",
         "icon": "ShoppingBasket",
-        "image": "https://cdn.grofers.com/da/cms-assets/cms/product/6b03ee2f-719a-4c16-85d6-76dc8c90d2a0.png",
+        "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738253/7hevenkart/catalog/migrated/cdn-grofers-com/6b03ee2f-719a-4c16-85d6-76dc8c90d2a0-9622478b23f4af5bc9ef.webp",
         "isActive": true,
         "sortOrder": 6
       }
@@ -628,7 +628,7 @@
     "slug": "paan-corner",
     "description": "Age-restricted tobacco products and smoking accessories. Sale only to adults in accordance with applicable law.",
     "icon": "ShoppingBasket",
-    "image": "https://cdn.grofers.com/cdn-cgi/image/f=auto,fit=scale-down,q=70,metadata=none,w=2700/layout-engine/2022-05/Group-33704.jpg",
+    "image": "https://res.cloudinary.com/zfmrimk7/image/upload/v1787738219/7hevenkart/catalog/migrated/cdn-grofers-com/group-33704-f1980d1d71a2982e8083.jpg",
     "isActive": true,
     "sortOrder": 11,
     "subcategories": [

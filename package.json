@@ -13,6 +13,7 @@
     "migrate:products": "node src/scripts/normalize-products.js",
     "migrate:coupon-redemptions": "node src/scripts/migrate-coupon-redemptions.js",
     "migrate:admin-access": "node src/scripts/migrate-admin-access.js",
+    "catalog:images:migrate": "node src/scripts/migrate-catalog-images.js",
     "catalog:import-paan": "node src/scripts/import-paan-corner.js",
     "owner:create": "node src/scripts/create-owner.js",
     "owner:reset-password": "node src/scripts/reset-owner-password.js",
