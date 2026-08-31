@@ -76,9 +76,36 @@ function providerPaymentSnapshot(payment) {
   return payment ? {
     id: payment.id, orderId: payment.order_id, amount: payment.amount, amountCaptured: payment.amount_captured,
     amountRefunded: payment.amount_refunded, currency: payment.currency, status: payment.status,
-    captured: payment.captured, method: payment.method, errorCode: payment.error_code,
+    fee: payment.fee, tax: payment.tax, captured: payment.captured, method: payment.method, errorCode: payment.error_code,
     errorDescription: payment.error_description, createdAt: payment.created_at,
   } : undefined;
+}
+
+export function razorpayProcessingFeeSnapshot(payment) {
+  if (payment?.amount === undefined || payment?.amount === null
+    || payment?.fee === undefined || payment?.fee === null) return null;
+  const paidAmountPaise = Number(payment?.amount);
+  const providerFeePaise = Number(payment?.fee);
+  if (!Number.isSafeInteger(paidAmountPaise) || paidAmountPaise < 0
+    || !Number.isSafeInteger(providerFeePaise) || providerFeePaise < 0) {
+    return null;
+  }
+  const providerTaxPaise = payment?.tax === undefined || payment?.tax === null ? NaN : Number(payment.tax);
+  return {
+    amountPaise: Math.min(providerFeePaise, paidAmountPaise),
+    ...(Number.isSafeInteger(providerTaxPaise) && providerTaxPaise >= 0
+      ? { taxPaise: Math.min(providerTaxPaise, providerFeePaise) }
+      : {}),
+    source: 'razorpay_payment',
+  };
+}
+
+function providerFeeFields(payment) {
+  const snapshot = razorpayProcessingFeeSnapshot(payment);
+  return snapshot ? {
+    providerFeePaise: snapshot.amountPaise,
+    ...(snapshot.taxPaise === undefined ? {} : { providerTaxPaise: snapshot.taxPaise }),
+  } : {};
 }
 
 function checkoutReceipt(userId, idempotencyKey) {
@@ -752,6 +779,7 @@ async function refundReleasedCapture(intent, payment) {
       providerPaymentId: payment.id,
       verifiedPaymentId: payment.id,
       providerStatus: payment.status,
+      ...providerFeeFields(payment),
       raw: providerPaymentSnapshot(payment),
       status: 'refund_pending',
       refundReason: 'RESERVATION_EXPIRED',
@@ -777,6 +805,7 @@ async function markIntentFromPayment(intent, payment, signature) {
     lastProviderSyncAt: new Date(),
     raw: providerPaymentSnapshot(payment),
     ...(captured ? {
+      ...providerFeeFields(payment),
       status: 'verified',
       verifiedPaymentId: payment.id,
       verifiedSignature: signature || intent.verifiedSignature,
@@ -808,6 +837,74 @@ async function fetchProviderPayment(paymentId) {
   } catch (error) {
     throw normalizeRazorpayError(error);
   }
+}
+
+function storedProcessingFee(source) {
+  const storedFeePaise = source?.providerFeePaise ?? source?.raw?.fee;
+  if (storedFeePaise === undefined || storedFeePaise === null) return null;
+  const amountPaise = Number(storedFeePaise);
+  const explicitAmountPaise = Number(source?.amountPaise);
+  const amountFromCurrency = Math.round(Number(source?.amount) * 100);
+  const rawAmountPaise = Number(source?.raw?.amount);
+  const paidAmountPaise = Number.isSafeInteger(explicitAmountPaise)
+    ? explicitAmountPaise
+    : Number.isSafeInteger(amountFromCurrency) ? amountFromCurrency : rawAmountPaise;
+  if (!Number.isSafeInteger(amountPaise) || amountPaise < 0) return null;
+  const boundedAmountPaise = Number.isSafeInteger(paidAmountPaise) && paidAmountPaise >= 0
+    ? Math.min(amountPaise, paidAmountPaise)
+    : amountPaise;
+  const storedTaxPaise = source?.providerTaxPaise ?? source?.raw?.tax;
+  const taxPaise = storedTaxPaise === undefined || storedTaxPaise === null ? NaN : Number(storedTaxPaise);
+  return {
+    amountPaise: boundedAmountPaise,
+    ...(Number.isSafeInteger(taxPaise) && taxPaise >= 0 ? { taxPaise: Math.min(taxPaise, boundedAmountPaise) } : {}),
+    source: 'razorpay_payment',
+  };
+}
+
+export async function ensureOrderRazorpayProcessingFee(order) {
+  if (!order || order.paymentMethod !== 'razorpay') return order;
+  const currentFee = order.paymentProcessingFee;
+  if (currentFee?.source === 'razorpay_payment'
+    && currentFee.amountPaise !== undefined && currentFee.amountPaise !== null
+    && Number.isSafeInteger(Number(currentFee.amountPaise))
+    && Number(currentFee.amountPaise) >= 0) return order;
+
+  const intent = order.paymentIntent
+    ? await PaymentIntent.findOne({ _id: order.paymentIntent, order: order._id })
+    : null;
+  const payment = await Payment.findOne({ order: order._id, provider: 'razorpay' });
+  let fee = storedProcessingFee(intent) || storedProcessingFee(payment);
+  let providerPayment;
+  const paymentId = intent?.verifiedPaymentId || intent?.providerPaymentId;
+  if (!fee && intent && paymentId) {
+    providerPayment = await fetchProviderPayment(paymentId);
+    validateProviderPayment(providerPayment, intent, paymentId);
+    if (providerPayment.status !== 'captured' || providerPayment.captured === false) return order;
+    fee = razorpayProcessingFeeSnapshot(providerPayment);
+  }
+  if (!fee) return order;
+
+  const capturedAt = new Date();
+  const paymentProcessingFee = { ...fee, capturedAt };
+  const feeFields = {
+    providerFeePaise: fee.amountPaise,
+    ...(fee.taxPaise === undefined ? {} : { providerTaxPaise: fee.taxPaise }),
+    ...(providerPayment ? { raw: providerPaymentSnapshot(providerPayment), lastProviderSyncAt: capturedAt } : {}),
+  };
+  const writes = [];
+  if (intent) writes.push(PaymentIntent.updateOne({ _id: intent._id }, { $set: feeFields }));
+  if (payment) {
+    const paymentFields = { ...feeFields };
+    delete paymentFields.lastProviderSyncAt;
+    writes.push(Payment.updateOne({ _id: payment._id }, { $set: paymentFields }));
+  }
+  const { Order } = await import('../orders/order.model.js');
+  writes.push(Order.updateOne({ _id: order._id }, { $set: { paymentProcessingFee } }));
+  await Promise.all(writes);
+  if (typeof order.set === 'function') order.set('paymentProcessingFee', paymentProcessingFee);
+  else order.paymentProcessingFee = paymentProcessingFee;
+  return order;
 }
 
 async function findCustomerIntent(customer, { paymentSessionId }, { excludePaanCorner = false } = {}) {
@@ -954,6 +1051,8 @@ export async function createCapturedRazorpayPaymentForOrder(order, intent, sessi
       order: order._id, provider: 'razorpay', providerOrderId: intent.providerOrderId,
       providerPaymentId: intent.verifiedPaymentId || intent.providerPaymentId,
       providerSignature: intent.verifiedSignature, amount: order.total, currency: intent.currency,
+      ...(intent.providerFeePaise === undefined ? {} : { providerFeePaise: intent.providerFeePaise }),
+      ...(intent.providerTaxPaise === undefined ? {} : { providerTaxPaise: intent.providerTaxPaise }),
       status: 'captured', raw: intent.raw,
     } },
     { upsert: true, new: true, session },

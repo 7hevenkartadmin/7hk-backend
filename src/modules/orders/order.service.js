@@ -12,6 +12,7 @@ import {
   consumeRazorpayPaymentIntent,
   createCapturedRazorpayPaymentForOrder,
   createPaymentForOrder,
+  ensureOrderRazorpayProcessingFee,
   getReservedSlotForIntent,
   getVerifiedPaymentIntentForOrder,
   initiateOrderRefund,
@@ -39,6 +40,7 @@ import {
 } from '../compliance/restrictedProductConsent.service.js';
 import { deliveryOtpForOrder, matchesDeliveryOtp } from './delivery-otp.service.js';
 import { findOwnedAddress } from '../addresses/address.service.js';
+import { deliveredOrderSupportPolicy } from '../support/support-window.js';
 import {
   consumeReservedInventory,
   inventoryChanges,
@@ -71,21 +73,24 @@ export function canCustomerCancelOrder(status) {
   return status === 'placed' || status === 'confirmed';
 }
 
-export const CUSTOMER_PREPAID_CANCELLATION_FEE_RATE = 10;
-
-export function customerPrepaidCancellationBreakdown(total) {
+export function customerPrepaidCancellationBreakdown(total, providerFeePaise = 0) {
   const numericTotal = Number(total);
   const grossPaidPaise = Number.isFinite(numericTotal)
     ? Math.max(0, Math.round(numericTotal * 100))
     : 0;
-  const cancellationFeePaise = Math.round(
-    grossPaidPaise * CUSTOMER_PREPAID_CANCELLATION_FEE_RATE / 100,
-  );
+  const numericProviderFeePaise = Number(providerFeePaise);
+  const cancellationFeePaise = Number.isSafeInteger(numericProviderFeePaise) && numericProviderFeePaise >= 0
+    ? Math.min(grossPaidPaise, numericProviderFeePaise)
+    : 0;
   const refundAmountPaise = Math.max(0, grossPaidPaise - cancellationFeePaise);
+  const cancellationFeeRate = grossPaidPaise > 0
+    ? Number((cancellationFeePaise * 100 / grossPaidPaise).toFixed(4))
+    : 0;
   return {
     grossPaidPaise,
     cancellationFeePaise,
     refundAmountPaise,
+    cancellationFeeRate,
     grossPaidAmount: grossPaidPaise / 100,
     cancellationFeeAmount: cancellationFeePaise / 100,
     refundAmount: refundAmountPaise / 100,
@@ -401,6 +406,14 @@ async function performCreateOrder(customer, payload, session, { excludePaanCorne
     paymentMethod: payload.paymentMethod,
     paymentStatus: 'pending',
     paymentIntent: paymentIntent?._id,
+    ...(paymentIntent?.providerFeePaise === undefined ? {} : {
+      paymentProcessingFee: {
+        amountPaise: paymentIntent.providerFeePaise,
+        ...(paymentIntent.providerTaxPaise === undefined ? {} : { taxPaise: paymentIntent.providerTaxPaise }),
+        source: 'razorpay_payment',
+        capturedAt: paymentIntent.lastProviderSyncAt || new Date(),
+      },
+    }),
     restrictedProductConsent,
     statusTimeline: [{ status: 'placed', note: 'Order placed', actor: customer._id }],
   }], { session });
@@ -488,20 +501,25 @@ async function validateCodEligibility(customer, payload, totals) {
 function customerOrderPayload(order) {
   const payload = typeof order.toObject === 'function' ? order.toObject() : { ...order };
   if (payload.status === 'out_for_delivery') payload.deliveryOtp = deliveryOtpForOrder(payload._id);
-  const prepaidBreakdown = customerPrepaidCancellationBreakdown(payload.total);
+  const exactProviderFeePaise = payload.paymentProcessingFee?.source === 'razorpay_payment'
+    ? payload.paymentProcessingFee.amountPaise
+    : 0;
+  const prepaidBreakdown = customerPrepaidCancellationBreakdown(payload.total, exactProviderFeePaise);
   payload.cancellationPolicy = {
     eligible: canCustomerCancelOrder(payload.status),
     closesAtStatus: 'packed',
-    feeApplies: payload.paymentMethod === 'razorpay',
-    cancellationFeeRate: payload.paymentMethod === 'razorpay'
-      ? CUSTOMER_PREPAID_CANCELLATION_FEE_RATE
-      : 0,
+    feeApplies: payload.paymentMethod === 'razorpay' && prepaidBreakdown.cancellationFeePaise > 0,
+    cancellationFeeRate: payload.paymentMethod === 'razorpay' ? prepaidBreakdown.cancellationFeeRate : 0,
     cancellationFeeAmount: payload.paymentMethod === 'razorpay'
       ? prepaidBreakdown.cancellationFeeAmount
       : 0,
     refundAmount: payload.paymentMethod === 'razorpay' ? prepaidBreakdown.refundAmount : 0,
+    feeSource: payload.paymentMethod === 'razorpay' && prepaidBreakdown.cancellationFeePaise > 0
+      ? 'razorpay_payment'
+      : null,
     currency: 'INR',
   };
+  payload.supportPolicy = deliveredOrderSupportPolicy(payload);
   return payload;
 }
 
@@ -520,6 +538,13 @@ export async function getOrderForCustomer(orderIdOrNumber, customer, { excludePa
     excludePaanCorner ? androidVisibleOrderFilter() : null,
   ));
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+  if (order.paymentMethod === 'razorpay' && !order.paymentProcessingFee?.source) {
+    try {
+      await ensureOrderRazorpayProcessingFee(order);
+    } catch {
+      // A provider outage must not block order viewing. Missing exact fee means no deduction.
+    }
+  }
   return customerOrderPayload(order);
 }
 
@@ -543,6 +568,7 @@ export async function verifyDeliveryOtp(id, otp, actor, { restrictedProductCheck
     {
       $set: {
         status: 'delivered',
+        deliveredAt,
         ...(current.paymentMethod === 'cod' ? { paymentStatus: 'paid' } : {}),
         ...(current.restrictedProductConsent?.policyVersion ? {
           'restrictedProductConsent.deliveryEligibilityVerifiedAt': deliveredAt,
@@ -600,12 +626,16 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
       order.status = 'cancelled';
       order.statusTimeline = order.statusTimeline || [];
       order.statusTimeline.push({ status: 'cancelled', note: payload.note || 'Order cancelled', actor: actor._id });
+      const exactProviderFeePaise = order.paymentProcessingFee?.source === 'razorpay_payment'
+        ? order.paymentProcessingFee.amountPaise
+        : 0;
       const cancellationBreakdown = customerInitiated && order.paymentMethod === 'razorpay'
-        ? customerPrepaidCancellationBreakdown(order.total)
+        ? customerPrepaidCancellationBreakdown(order.total, exactProviderFeePaise)
         : {
           grossPaidPaise: Math.max(0, Math.round(Number(order.total) * 100)),
           cancellationFeePaise: 0,
           refundAmountPaise: Math.max(0, Math.round(Number(order.total) * 100)),
+          cancellationFeeRate: 0,
           grossPaidAmount: Number(order.total),
           cancellationFeeAmount: 0,
           refundAmount: Number(order.total),
@@ -617,8 +647,11 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
           ...(order.refund?.toObject?.() || {}),
           amount: cancellationBreakdown.refundAmount,
           grossPaidAmount: cancellationBreakdown.grossPaidAmount,
-          cancellationFeeRate: customerInitiated ? CUSTOMER_PREPAID_CANCELLATION_FEE_RATE : 0,
+          cancellationFeeRate: customerInitiated ? cancellationBreakdown.cancellationFeeRate : 0,
           cancellationFeeAmount: cancellationBreakdown.cancellationFeeAmount,
+          ...(customerInitiated && cancellationBreakdown.cancellationFeePaise > 0
+            ? { cancellationFeeSource: 'razorpay_payment' }
+            : {}),
           initiatedBy: customerInitiated ? 'customer' : 'staff',
           reason: refundReasonCode,
           requiresManualReview: false,
@@ -638,8 +671,11 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
             status: 'refund_pending',
             amount: cancellationBreakdown.refundAmount,
             grossPaidAmount: cancellationBreakdown.grossPaidAmount,
-            cancellationFeeRate: customerInitiated ? CUSTOMER_PREPAID_CANCELLATION_FEE_RATE : 0,
+            cancellationFeeRate: customerInitiated ? cancellationBreakdown.cancellationFeeRate : 0,
             cancellationFeeAmount: cancellationBreakdown.cancellationFeeAmount,
+            ...(customerInitiated && cancellationBreakdown.cancellationFeePaise > 0
+              ? { cancellationFeeSource: 'razorpay_payment' }
+              : {}),
             initiatedBy: customerInitiated ? 'customer' : 'staff',
             reason: refundReasonCode,
             initiatedAt: new Date(),
@@ -651,7 +687,9 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
             status: 'refund_pending',
             amount: cancellationBreakdown.refundAmount,
             note: customerInitiated
-              ? `Automatic 90% refund requested; 10% cancellation fee retained (${cancellationBreakdown.cancellationFeeAmount.toFixed(2)} INR)`
+              ? cancellationBreakdown.cancellationFeePaise > 0
+                ? `Automatic refund requested; exact Razorpay processing fee retained (${cancellationBreakdown.cancellationFeeAmount.toFixed(2)} INR)`
+                : 'Automatic full refund requested; no Razorpay processing fee was deducted'
               : 'Automatic full refund requested after staff cancellation',
           });
         } else if (queuedRefund?.status === 'refunded') {
@@ -659,8 +697,11 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
             status: order.paymentStatus,
             amount: cancellationBreakdown.refundAmount,
             grossPaidAmount: cancellationBreakdown.grossPaidAmount,
-            cancellationFeeRate: customerInitiated ? CUSTOMER_PREPAID_CANCELLATION_FEE_RATE : 0,
+            cancellationFeeRate: customerInitiated ? cancellationBreakdown.cancellationFeeRate : 0,
             cancellationFeeAmount: cancellationBreakdown.cancellationFeeAmount,
+            ...(customerInitiated && cancellationBreakdown.cancellationFeePaise > 0
+              ? { cancellationFeeSource: 'razorpay_payment' }
+              : {}),
             initiatedBy: customerInitiated ? 'customer' : 'staff',
             reason: refundReasonCode,
             processedAt: new Date(),

@@ -38,6 +38,8 @@ const paymentIntentSchema = new mongoose.Schema({
   reservation: { type: reservationSchema, required: true },
   status: { type: String, enum: ['initializing', 'created', 'authorized', 'verified', 'processing', 'consumed', 'failed', 'refund_pending', 'refunded', 'refund_failed'], default: 'initializing', index: true },
   providerStatus: String,
+  providerFeePaise: { type: Number, min: 0 },
+  providerTaxPaise: { type: Number, min: 0 },
   order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', index: true },
   raw: mongoose.Schema.Types.Mixed,
   verifiedPaymentId: String,

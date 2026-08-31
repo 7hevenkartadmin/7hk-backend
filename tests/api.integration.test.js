@@ -59,6 +59,17 @@ test('admin routes require authentication before returning data', async (t) => {
   assert.equal(body.code, 'AUTH_REQUIRED');
 });
 
+test('admin store settings require authentication', async (t) => {
+  const client = await createTestClient();
+  t.after(() => client.close());
+
+  const { response, body } = await client.request('/api/v1/settings/admin');
+
+  assert.equal(response.status, 401);
+  assert.equal(body.success, false);
+  assert.equal(body.code, 'AUTH_REQUIRED');
+});
+
 test('owner administrator lifecycle requires an authenticated owner', async (t) => {
   const client = await createTestClient();
   t.after(() => client.close());

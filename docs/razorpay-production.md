@@ -131,6 +131,6 @@ Run these cases with Test Mode credentials on staging before switching to Live M
 7. A captured payment that cannot be fulfilled releases stock, slot, and coupon and enters the automatic refund path.
 8. Duplicate and out-of-order webhooks do not regress a captured or consumed payment.
 9. Expired unpaid sessions release all reservations.
-10. A cancelled paid order is refunded once and its refund webhook updates the order ledger.
+10. A staff-cancelled paid order is refunded in full. A voluntary customer cancellation retains only the captured payment's exact Razorpay `fee` (already inclusive of `tax`), never an estimated percentage; a missing exact fee fails safely to a full refund. The refund is created once and its webhook updates the order ledger.
 11. A stale webhook record left in `processing` is atomically reclaimed after its five-minute lease.
 12. A different authenticated customer cannot read, verify, reconcile, abandon, or consume the session.

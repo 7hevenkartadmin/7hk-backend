@@ -62,6 +62,11 @@ export async function uploadCatalogImage(file, { kind = 'product', actorId } = {
     throw new AppError('Image dimensions must be between 64 and 8000 pixels', 422, 'INVALID_IMAGE_DIMENSIONS');
   }
 
+  if (kind === 'banner' && (result.width < 800 || result.height < 300)) {
+    await cloudinary.uploader.destroy(result.public_id, { resource_type: 'image', invalidate: true }).catch(() => {});
+    throw new AppError('Banner images must be at least 800 by 300 pixels', 422, 'INVALID_BANNER_DIMENSIONS');
+  }
+
   return {
     url: result.secure_url,
     publicId: result.public_id,

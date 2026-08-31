@@ -1,16 +1,54 @@
 import { z } from 'zod';
 import { parseStoreDate } from '../../shared/utils/storeDate.js';
 
+const safeImageUrl = z.string().url('Upload a valid banner image').refine((value) => {
+  try { return new URL(value).protocol === 'https:'; } catch { return false; }
+}, 'Banner images must use HTTPS');
+
+const safeStorefrontHref = z.string().trim().min(1).max(160).refine(
+  (value) => value.startsWith('/') || /^#[a-zA-Z][\w:-]*$/.test(value),
+  'Use an internal path beginning with / or a page anchor beginning with #',
+);
+
 const bannerSchema = z.object({
+  placement: z.enum(['hero', 'middle']).default('hero'),
+  displayStyle: z.enum(['content', 'image-only']).default('content'),
+  theme: z.enum(['light', 'dark']).default('dark'),
+  textPosition: z.enum(['left', 'center', 'right']).default('left'),
+  imagePosition: z.enum(['left', 'center', 'right']).default('center'),
+  overlayOpacity: z.number().int().min(0).max(90).default(55),
   title: z.string().max(140).default(''),
   highlight: z.string().max(80).default(''),
   copy: z.string().max(360).default(''),
   tag: z.string().max(80).default(''),
-  image: z.string().url('Upload a valid banner image'),
+  image: safeImageUrl,
+  imagePublicId: z.string().max(240).default(''),
+  imageWidth: z.number().int().min(0).max(8000).default(0),
+  imageHeight: z.number().int().min(0).max(8000).default(0),
+  altText: z.string().max(160).default(''),
   ctaLabel: z.string().max(40).default('Shop Now'),
-  ctaHref: z.string().max(160).default('#products'),
+  ctaHref: safeStorefrontHref.default('#products'),
   isActive: z.boolean().default(true),
-  sortOrder: z.number().default(0),
+  sortOrder: z.number().int().min(0).max(100).default(1).transform((value) => Math.max(1, value)),
+  startsAt: z.string().datetime().nullable().optional(),
+  endsAt: z.string().datetime().nullable().optional(),
+}).superRefine((banner, context) => {
+  if (banner.startsAt && banner.endsAt && new Date(banner.endsAt) <= new Date(banner.startsAt)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['endsAt'], message: 'End time must be after start time' });
+  }
+});
+
+const bannerSectionsSchema = z.object({
+  hero: z.object({
+    isActive: z.boolean(),
+    eyebrow: z.string().max(80).default(''),
+    title: z.string().trim().min(3).max(100),
+  }),
+  middle: z.object({
+    isActive: z.boolean(),
+    eyebrow: z.string().trim().max(80).default(''),
+    title: z.string().trim().min(3).max(100),
+  }),
 });
 
 const deliveryZoneSchema = z.object({
@@ -74,11 +112,16 @@ const codSettingsSchema = z.object({
 });
 
 export const storeSettingsSchema = z.object({
-  homepageBanners: z.array(bannerSchema).max(10).optional(),
+  homepageBanners: z.array(bannerSchema).max(10).superRefine((banners, context) => {
+    const counts = banners.reduce((result, banner) => ({ ...result, [banner.placement]: (result[banner.placement] || 0) + 1 }), {});
+    if ((counts.hero || 0) > 4) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Hero supports up to 4 banners' });
+    if ((counts.middle || 0) > 6) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Middle section supports up to 6 banners' });
+  }).optional(),
+  homepageBannerSections: bannerSectionsSchema.optional(),
   deliveryZones: deliveryZonesSchema.optional(),
   codSettings: codSettingsSchema.optional(),
   orderingSchedule: orderingScheduleSchema.optional(),
-}).refine((data) => data.homepageBanners || data.deliveryZones || data.codSettings || data.orderingSchedule, {
+}).refine((data) => data.homepageBanners || data.homepageBannerSections || data.deliveryZones || data.codSettings || data.orderingSchedule, {
   message: 'At least one setting group is required',
 });
 

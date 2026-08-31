@@ -1,16 +1,34 @@
 import mongoose from 'mongoose';
 
 const bannerSchema = new mongoose.Schema({
+  placement: { type: String, enum: ['hero', 'middle'], default: 'hero', index: true },
+  displayStyle: { type: String, enum: ['content', 'image-only'], default: 'content' },
+  theme: { type: String, enum: ['light', 'dark'], default: 'dark' },
+  textPosition: { type: String, enum: ['left', 'center', 'right'], default: 'left' },
+  imagePosition: { type: String, enum: ['left', 'center', 'right'], default: 'center' },
+  overlayOpacity: { type: Number, min: 0, max: 90, default: 55 },
   title: { type: String, trim: true, default: '' },
   highlight: { type: String, trim: true, default: '' },
   copy: { type: String, trim: true, default: '' },
   tag: { type: String, trim: true, default: '' },
   image: { type: String, trim: true, required: true },
+  imagePublicId: { type: String, trim: true, default: '' },
+  imageWidth: { type: Number, min: 0, default: 0 },
+  imageHeight: { type: Number, min: 0, default: 0 },
+  altText: { type: String, trim: true, default: '' },
   ctaLabel: { type: String, trim: true, default: 'Shop Now' },
   ctaHref: { type: String, trim: true, default: '#products' },
   isActive: { type: Boolean, default: true },
-  sortOrder: { type: Number, default: 0 },
+  sortOrder: { type: Number, min: 1, max: 100, default: 1 },
+  startsAt: { type: Date, default: null },
+  endsAt: { type: Date, default: null },
 }, { _id: true });
+
+const bannerSectionSchema = new mongoose.Schema({
+  isActive: { type: Boolean, default: true },
+  eyebrow: { type: String, trim: true, default: '' },
+  title: { type: String, trim: true, default: '' },
+}, { _id: false });
 
 const deliveryZoneSchema = new mongoose.Schema({
   code: { type: String, trim: true, required: true },
@@ -62,6 +80,10 @@ const codSettingsSchema = new mongoose.Schema({
 const storeSettingsSchema = new mongoose.Schema({
   key: { type: String, default: 'storefront', unique: true, index: true },
   homepageBanners: [bannerSchema],
+  homepageBannerSections: {
+    hero: { type: bannerSectionSchema, default: () => ({ isActive: true, title: 'Featured grocery collections' }) },
+    middle: { type: bannerSectionSchema, default: () => ({ isActive: true, eyebrow: 'More for your home', title: 'Everyday essentials' }) },
+  },
   deliveryZones: [deliveryZoneSchema],
   codSettings: codSettingsSchema,
   orderingSchedule: orderingScheduleSchema,

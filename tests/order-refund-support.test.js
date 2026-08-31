@@ -10,11 +10,16 @@ import { Order } from '../src/modules/orders/order.model.js';
 import { User } from '../src/modules/users/user.model.js';
 import { Payment } from '../src/modules/payments/payment.model.js';
 import { PaymentIntent } from '../src/modules/payments/paymentIntent.model.js';
-import { applyRazorpayRefund } from '../src/modules/payments/payment.service.js';
+import { applyRazorpayRefund, razorpayProcessingFeeSnapshot } from '../src/modules/payments/payment.service.js';
 import { SupportTicket } from '../src/modules/support/supportTicket.model.js';
-import { createSupportTicketSchema } from '../src/modules/support/supportTicket.validation.js';
+import { createSupportTicketSchema, supportProofUploadSchema } from '../src/modules/support/supportTicket.validation.js';
 import { matchesPickupOtp, pickupOtpForTicket } from '../src/modules/support/pickup-otp.service.js';
-import { rejectSupportTicket } from '../src/modules/support/supportTicket.service.js';
+import { assertCustomerSupportEligibility, createSupportTicket, rejectSupportTicket } from '../src/modules/support/supportTicket.service.js';
+import {
+  DELIVERED_ORDER_SUPPORT_WINDOW_MS,
+  deliveredAtForSupport,
+  deliveredOrderSupportPolicy,
+} from '../src/modules/support/support-window.js';
 
 async function withStubs(stubs, callback) {
   const originals = stubs.map(({ object, method }) => ({ object, method, value: object[method] }));
@@ -37,18 +42,30 @@ test('customer cancellation closes strictly when packing begins', () => {
   assert.equal(customerCancelOrderSchema.safeParse({ reason: 'Valid reason', status: 'cancelled' }).success, false);
 });
 
-test('customer prepaid cancellation retains exactly 10 percent in paise', () => {
-  assert.deepEqual(customerPrepaidCancellationBreakdown(303), {
+test('customer prepaid cancellation retains only the exact provider fee in paise', () => {
+  assert.deepEqual(customerPrepaidCancellationBreakdown(303, 927), {
     grossPaidPaise: 30300,
-    cancellationFeePaise: 3030,
-    refundAmountPaise: 27270,
+    cancellationFeePaise: 927,
+    refundAmountPaise: 29373,
+    cancellationFeeRate: 3.0594,
     grossPaidAmount: 303,
-    cancellationFeeAmount: 30.3,
-    refundAmount: 272.7,
+    cancellationFeeAmount: 9.27,
+    refundAmount: 293.73,
   });
-  const rounded = customerPrepaidCancellationBreakdown(303.01);
-  assert.equal(rounded.cancellationFeePaise, 3030);
-  assert.equal(rounded.refundAmountPaise, 27271);
+  const missing = customerPrepaidCancellationBreakdown(303.01);
+  assert.equal(missing.cancellationFeePaise, 0);
+  assert.equal(missing.refundAmountPaise, 30301);
+  assert.equal(customerPrepaidCancellationBreakdown(10, 999999).cancellationFeePaise, 1000);
+});
+
+test('Razorpay processing fee snapshot treats tax as included in the provider fee', () => {
+  assert.deepEqual(razorpayProcessingFeeSnapshot({ amount: 10000, fee: 236, tax: 36 }), {
+    amountPaise: 236,
+    taxPaise: 36,
+    source: 'razorpay_payment',
+  });
+  assert.equal(razorpayProcessingFeeSnapshot({ amount: 10000 }), null);
+  assert.equal(razorpayProcessingFeeSnapshot({ amount: 10000, fee: null, tax: null }), null);
 });
 
 test('support proof is mandatory for damaged and expired claims only', () => {
@@ -61,6 +78,95 @@ test('support proof is mandatory for damaged and expired claims only', () => {
   assert.equal(createSupportTicketSchema.safeParse({ ...base, category: 'expired' }).success, false);
   assert.equal(createSupportTicketSchema.safeParse({ ...base, category: 'missing_item' }).success, true);
   assert.equal(createSupportTicketSchema.safeParse({ ...base, category: 'damaged', proofImages: ['https://cdn.example.com/proof.webp'] }).success, true);
+  assert.equal(supportProofUploadSchema.safeParse({ orderId: base.orderId }).success, true);
+  assert.equal(supportProofUploadSchema.safeParse({ orderId: base.orderId, customerId: base.orderId }).success, false);
+});
+
+test('delivered-order support closes at the exact five-hour boundary and fails closed', () => {
+  const deliveredAt = new Date('2026-09-01T04:00:00.000Z');
+  const order = { status: 'delivered', deliveredAt, statusTimeline: [] };
+  const justBefore = deliveredOrderSupportPolicy(order, new Date(deliveredAt.getTime() + DELIVERED_ORDER_SUPPORT_WINDOW_MS - 1));
+  assert.equal(justBefore.eligible, true);
+  assert.equal(justBefore.windowHours, 5);
+  assert.equal(justBefore.closesAt, '2026-09-01T09:00:00.000Z');
+
+  const atDeadline = deliveredOrderSupportPolicy(order, new Date(deliveredAt.getTime() + DELIVERED_ORDER_SUPPORT_WINDOW_MS));
+  assert.equal(atDeadline.eligible, false);
+  assert.equal(atDeadline.reasonCode, 'SUPPORT_TICKET_WINDOW_EXPIRED');
+  assert.equal(deliveredOrderSupportPolicy({ status: 'delivered', statusTimeline: [] }, deliveredAt).reasonCode, 'SUPPORT_TICKET_DELIVERY_TIME_UNAVAILABLE');
+  assert.equal(deliveredOrderSupportPolicy({ status: 'packed', statusTimeline: [] }, deliveredAt).reasonCode, 'SUPPORT_TICKET_DELIVERY_REQUIRED');
+});
+
+test('legacy delivery timelines remain eligible without allowing a later timestamp to extend the window', () => {
+  const firstDelivery = new Date('2026-09-01T04:00:00.000Z');
+  const order = {
+    status: 'delivered',
+    deliveredAt: new Date('2026-09-01T04:05:00.000Z'),
+    statusTimeline: [
+      { status: 'out_for_delivery', at: new Date('2026-09-01T03:00:00.000Z') },
+      { status: 'delivered', at: firstDelivery },
+    ],
+  };
+  assert.equal(deliveredAtForSupport(order).toISOString(), firstDelivery.toISOString());
+  assert.equal(deliveredOrderSupportPolicy(order, new Date('2026-09-01T09:02:00.000Z')).eligible, false);
+});
+
+test('support eligibility hides other customers orders and rejects expired owned orders', async () => {
+  const customer = { _id: new mongoose.Types.ObjectId() };
+  const orderId = new mongoose.Types.ObjectId();
+  await withStubs([
+    { object: Order, method: 'findOne', implementation: async () => null },
+  ], async () => {
+    await assert.rejects(
+      () => assertCustomerSupportEligibility(customer, orderId),
+      (error) => error.code === 'ORDER_NOT_FOUND' && error.statusCode === 404,
+    );
+  });
+
+  await withStubs([
+    { object: Order, method: 'findOne', implementation: async () => ({
+      _id: orderId,
+      customer: customer._id,
+      status: 'delivered',
+      deliveredAt: new Date(Date.now() - DELIVERED_ORDER_SUPPORT_WINDOW_MS),
+    }) },
+  ], async () => {
+    await assert.rejects(
+      () => assertCustomerSupportEligibility(customer, orderId),
+      (error) => error.code === 'SUPPORT_TICKET_WINDOW_EXPIRED' && error.statusCode === 409,
+    );
+  });
+});
+
+test('ticket creation stores the audited delivery window and normalizes duplicate races', async () => {
+  const customer = { _id: new mongoose.Types.ObjectId() };
+  const orderId = new mongoose.Types.ObjectId();
+  const deliveredAt = new Date(Date.now() - 60 * 60 * 1000);
+  const payload = {
+    orderId: String(orderId),
+    category: 'missing_item',
+    description: 'One item was missing from the delivered order.',
+    proofImages: [],
+  };
+  let created;
+  await withStubs([
+    { object: Order, method: 'findOne', implementation: async () => ({ _id: orderId, customer: customer._id, status: 'delivered', deliveredAt }) },
+    { object: SupportTicket, method: 'findOne', implementation: async () => null },
+    { object: SupportTicket, method: 'create', implementation: async (document) => { created = document; return document; } },
+  ], async () => createSupportTicket(customer, payload));
+  assert.equal(created.orderDeliveredAt.toISOString(), deliveredAt.toISOString());
+  assert.equal(created.submissionDeadline.getTime(), deliveredAt.getTime() + DELIVERED_ORDER_SUPPORT_WINDOW_MS);
+
+  await withStubs([
+    { object: Order, method: 'findOne', implementation: async () => ({ _id: orderId, customer: customer._id, status: 'delivered', deliveredAt }) },
+    { object: SupportTicket, method: 'findOne', implementation: async () => null },
+    { object: SupportTicket, method: 'create', implementation: async () => { const error = new Error('duplicate'); error.code = 11000; error.keyPattern = { activeOrderKey: 1 }; throw error; } },
+  ], async () => {
+    await assert.rejects(
+      () => createSupportTicket(customer, payload),
+      (error) => error.code === 'SUPPORT_TICKET_ALREADY_OPEN' && error.statusCode === 409,
+    );
+  });
 });
 
 test('refund, customer-risk and support-ticket persistence fields remain typed', () => {
@@ -71,12 +177,19 @@ test('refund, customer-risk and support-ticket persistence fields remain typed',
   assert.ok(Order.schema.path('refund.grossPaidAmount'));
   assert.ok(Order.schema.path('refund.cancellationFeeRate'));
   assert.ok(Order.schema.path('refund.cancellationFeeAmount'));
+  assert.ok(Order.schema.path('refund.cancellationFeeSource'));
   assert.ok(Order.schema.path('refund.initiatedBy'));
+  assert.ok(Order.schema.path('paymentProcessingFee.amountPaise'));
+  assert.ok(PaymentIntent.schema.path('providerFeePaise'));
+  assert.ok(Payment.schema.path('providerFeePaise'));
   assert.ok(PaymentIntent.schema.path('refundTargetPaise'));
   assert.equal(User.schema.path('rejectedTicketsCount').defaultValue, 0);
   assert.equal(User.schema.path('isCodDisabled').defaultValue, false);
   assert.ok(SupportTicket.schema.path('providerRefundId'));
   assert.ok(SupportTicket.schema.path('refundArn'));
+  assert.ok(SupportTicket.schema.path('orderDeliveredAt'));
+  assert.ok(SupportTicket.schema.path('submissionDeadline'));
+  assert.ok(Order.schema.path('deliveredAt'));
   assert.equal(SupportTicket.schema.indexes().some(([keys, options]) => keys.activeOrderKey === 1 && options.unique === true), true);
 });
 

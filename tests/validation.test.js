@@ -6,7 +6,7 @@ import { createOrderSchema, quoteOrderSchema, updateStatusSchema } from '../src/
 import { storeSettingsSchema } from '../src/modules/settings/settings.validation.js';
 import { addressSchema } from '../src/modules/users/user.validation.js';
 import { canTransitionOrderStatus } from '../src/modules/orders/order.service.js';
-import { defaultOrderingSchedule } from '../src/modules/settings/settings.defaults.js';
+import { defaultHomepageBanners, defaultOrderingSchedule } from '../src/modules/settings/settings.defaults.js';
 
 const productId = '507f1f77bcf86cd799439011';
 
@@ -157,6 +157,49 @@ test('store settings validation accepts COD fraud controls and rejects unsafe va
       specialDates: [{ date: '2026-02-30', isOpen: false, opensAt: '09:00', closesAt: '20:00', reason: 'Invalid day' }],
     },
   }).success, false);
+});
+
+test('homepage banner validation enforces secure links, placements, schedules, and layout limits', () => {
+  const validBanner = {
+    placement: 'middle',
+    displayStyle: 'content',
+    theme: 'light',
+    textPosition: 'left',
+    imagePosition: 'center',
+    overlayOpacity: 45,
+    title: 'Save on pantry staples',
+    highlight: 'pantry staples',
+    copy: 'Weekly essentials at useful prices.',
+    tag: 'Pantry reset',
+    image: 'https://cdn.example.com/banner.webp',
+    imagePublicId: 'seven-heaven/banner/abc',
+    imageWidth: 1600,
+    imageHeight: 640,
+    altText: 'Jars of rice and lentils beside cooking oil',
+    ctaLabel: 'Shop pantry',
+    ctaHref: '/category/atta-rice-dal',
+    isActive: true,
+    sortOrder: 1,
+    startsAt: '2026-08-01T00:00:00.000Z',
+    endsAt: '2026-09-01T00:00:00.000Z',
+  };
+
+  assert.equal(storeSettingsSchema.safeParse({ homepageBanners: [validBanner] }).success, true);
+  assert.equal(storeSettingsSchema.safeParse({ homepageBanners: [{ ...validBanner, ctaHref: 'javascript:alert(1)' }] }).success, false);
+  assert.equal(storeSettingsSchema.safeParse({ homepageBanners: [{ ...validBanner, image: 'http://cdn.example.com/banner.webp' }] }).success, false);
+  assert.equal(storeSettingsSchema.safeParse({ homepageBanners: [{ ...validBanner, endsAt: validBanner.startsAt }] }).success, false);
+  assert.equal(storeSettingsSchema.safeParse({ homepageBanners: Array.from({ length: 5 }, (_, index) => ({ ...validBanner, placement: 'hero', sortOrder: index + 1 })) }).success, false);
+  assert.equal(storeSettingsSchema.safeParse({ homepageBanners: defaultHomepageBanners }).success, true);
+
+  const migratedLegacyBanner = storeSettingsSchema.safeParse({
+    homepageBanners: [{
+      title: '', highlight: 'Legacy highlight', copy: '', tag: '',
+      image: 'https://cdn.example.com/legacy.webp', ctaLabel: 'Shop Now',
+      ctaHref: '#products', isActive: true, sortOrder: 0,
+    }],
+  });
+  assert.equal(migratedLegacyBanner.success, true);
+  assert.equal(migratedLegacyBanner.data.homepageBanners[0].sortOrder, 1);
 });
 
 test('saved address validation requires map coordinates and backend-compatible details', () => {

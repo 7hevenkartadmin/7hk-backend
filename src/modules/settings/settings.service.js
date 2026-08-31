@@ -1,5 +1,13 @@
 import { StoreSettings } from './storeSettings.model.js';
-import { defaultCodSettings, defaultDeliveryZones, defaultHomepageBanners, defaultOrderingSchedule } from './settings.defaults.js';
+import { defaultCodSettings, defaultDeliveryZones, defaultHomepageBanners, defaultHomepageBannerSections, defaultOrderingSchedule } from './settings.defaults.js';
+
+function normalizeBannerSections(sections = {}) {
+  const source = typeof sections?.toObject === 'function' ? sections.toObject() : sections || {};
+  return {
+    hero: { ...defaultHomepageBannerSections.hero, ...(source.hero || {}) },
+    middle: { ...defaultHomepageBannerSections.middle, ...(source.middle || {}) },
+  };
+}
 
 function normalizeOrderingSchedule(schedule = {}) {
   const source = typeof schedule.toObject === 'function' ? schedule.toObject() : schedule;
@@ -19,9 +27,11 @@ function normalizeOrderingSchedule(schedule = {}) {
 
 function normalizeSettings(settings) {
   return {
-    homepageBanners: (settings.homepageBanners?.length ? settings.homepageBanners : defaultHomepageBanners)
+    homepageBanners: (Array.isArray(settings.homepageBanners) ? settings.homepageBanners : defaultHomepageBanners)
       .map((banner) => (typeof banner.toObject === 'function' ? banner.toObject() : banner))
+      .map((banner) => ({ placement: 'hero', displayStyle: 'content', theme: 'dark', textPosition: 'left', imagePosition: 'center', overlayOpacity: 55, ...banner }))
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)),
+    homepageBannerSections: normalizeBannerSections(settings.homepageBannerSections),
     deliveryZones: (settings.deliveryZones?.length ? settings.deliveryZones : defaultDeliveryZones)
       .map((zone) => (typeof zone.toObject === 'function' ? zone.toObject() : zone))
       .map((zone) => ({ ...zone, orderCutoff: zone.orderCutoff || (zone.code === 'A' ? '20:00' : '19:00') }))
@@ -37,7 +47,7 @@ function normalizeSettings(settings) {
 export async function getStoreSettings() {
   const settings = await StoreSettings.findOneAndUpdate(
     { key: 'storefront' },
-    { $setOnInsert: { homepageBanners: defaultHomepageBanners, deliveryZones: defaultDeliveryZones, codSettings: defaultCodSettings, orderingSchedule: defaultOrderingSchedule } },
+    { $setOnInsert: { homepageBanners: defaultHomepageBanners, homepageBannerSections: defaultHomepageBannerSections, deliveryZones: defaultDeliveryZones, codSettings: defaultCodSettings, orderingSchedule: defaultOrderingSchedule } },
     { upsert: true, new: true },
   );
   return normalizeSettings(settings);
@@ -46,6 +56,7 @@ export async function getStoreSettings() {
 export async function updateStoreSettings(payload) {
   const update = {};
   if (payload.homepageBanners) update.homepageBanners = payload.homepageBanners;
+  if (payload.homepageBannerSections) update.homepageBannerSections = payload.homepageBannerSections;
   if (payload.deliveryZones) update.deliveryZones = payload.deliveryZones.sort((a, b) => a.limit - b.limit);
   if (payload.codSettings) update.codSettings = payload.codSettings;
   if (payload.orderingSchedule) update.orderingSchedule = payload.orderingSchedule;

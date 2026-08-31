@@ -124,5 +124,20 @@ export function streamInvoicePdf(order, response) {
       y + 24,
       { align: "center" },
     );
+  document
+    .moveDown(1.5)
+    .font("Helvetica-Bold")
+    .fontSize(9)
+    .fillColor("#222")
+    .text("Terms & support");
+  document
+    .font("Helvetica")
+    .fontSize(8)
+    .fillColor("#555")
+    .list([
+      "Cancellation is available only before packing. For a voluntary prepaid cancellation, only Razorpay's actual transaction fee shown before confirmation may be retained; if the exact fee is unavailable, no fee is deducted.",
+      "Staff or platform cancellations do not retain a customer cancellation fee.",
+      "Open a delivered-order support ticket within 5 hours of the recorded delivery time for missing, wrong, damaged, expired or quality-affected items. Review and reasonable proof may be required; statutory consumer rights remain unaffected.",
+    ], { bulletRadius: 1.5, textIndent: 10, bulletIndent: 2 });
   document.end();
 }

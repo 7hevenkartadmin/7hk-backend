@@ -7,6 +7,8 @@ const paymentSchema = new mongoose.Schema({
   providerPaymentId: String,
   providerSignature: String,
   amount: { type: Number, min: 0, required: true },
+  providerFeePaise: { type: Number, min: 0 },
+  providerTaxPaise: { type: Number, min: 0 },
   currency: { type: String, default: 'INR' },
   status: { type: String, enum: ['created', 'authorized', 'captured', 'failed', 'refunded', 'partially_refunded'], default: 'created' },
   amountRefunded: { type: Number, min: 0, default: 0 },

@@ -14,6 +14,10 @@ export const createSupportTicketSchema = z.object({
   }
 });
 
+export const supportProofUploadSchema = z.object({
+  orderId: objectId,
+}).strict();
+
 export const reviewSupportTicketSchema = z.object({
   note: z.string().trim().min(3).max(500),
   requiresPickup: z.boolean().optional().default(false),

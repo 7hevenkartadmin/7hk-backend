@@ -13,6 +13,8 @@ const supportTicketSchema = new mongoose.Schema({
   order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true, index: true },
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   activeOrderKey: { type: String, trim: true },
+  orderDeliveredAt: Date,
+  submissionDeadline: Date,
   category: { type: String, enum: SUPPORT_TICKET_CATEGORIES, required: true },
   description: { type: String, trim: true, required: true, maxlength: 1500 },
   proofImages: [{ type: String, trim: true }],

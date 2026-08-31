@@ -9,6 +9,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { audit } from '../audit/audit.service.js';
 import {
   approveSupportTicket,
+  assertCustomerSupportEligibility,
   createSupportTicket,
   listAdminSupportTickets,
   listCustomerSupportTickets,
@@ -19,6 +20,7 @@ import {
   createSupportTicketSchema,
   listSupportTicketsSchema,
   reviewSupportTicketSchema,
+  supportProofUploadSchema,
   verifyPickupOtpSchema,
 } from './supportTicket.validation.js';
 import { SupportTicket } from './supportTicket.model.js';
@@ -29,8 +31,9 @@ export const supportTicketRoutes = Router();
 
 supportTicketRoutes.use(requireAuth);
 
-supportTicketRoutes.post('/uploads/proof', authorize('customer'), supportTicketRateLimiter, catalogImageUpload, asyncHandler(async (req, res) => {
+supportTicketRoutes.post('/uploads/proof', authorize('customer'), supportTicketRateLimiter, catalogImageUpload, validate(supportProofUploadSchema), asyncHandler(async (req, res) => {
   if (!req.file) throw new AppError('Proof image is required', 422, 'IMAGE_REQUIRED');
+  await assertCustomerSupportEligibility(req.user, req.body.orderId, { excludePaanCorner: isAndroidRequest(req) });
   const image = await uploadCatalogImage(req.file, { kind: 'support-proof', actorId: req.user._id });
   created(res, { image }, 'Proof image uploaded');
 }));

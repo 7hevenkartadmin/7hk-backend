@@ -13,11 +13,24 @@ import { containsPaanCornerReference } from '../catalog/paanCorner.visibility.js
 
 export const settingsRoutes = Router();
 
-function settingsForClient(settings, req) {
-  if (!isAndroidRequest(req)) return settings;
-  return {
+export function settingsForClient(settings, req) {
+  const now = Date.now();
+  const publicSettings = {
     ...settings,
-    homepageBanners: (settings.homepageBanners || []).filter((banner) => ![
+    homepageBannerPlacementsConfigured: {
+      hero: (settings.homepageBanners || []).some((banner) => (banner.placement || 'hero') === 'hero'),
+      middle: (settings.homepageBanners || []).some((banner) => banner.placement === 'middle'),
+    },
+    homepageBanners: (settings.homepageBanners || [])
+      .filter((banner) => banner.isActive !== false
+        && (!banner.startsAt || new Date(banner.startsAt).getTime() <= now)
+        && (!banner.endsAt || new Date(banner.endsAt).getTime() > now))
+      .map(({ imagePublicId: _imagePublicId, ...banner }) => banner),
+  };
+  if (!isAndroidRequest(req)) return publicSettings;
+  return {
+    ...publicSettings,
+    homepageBanners: publicSettings.homepageBanners.filter((banner) => ![
       banner.title,
       banner.highlight,
       banner.copy,
@@ -34,6 +47,10 @@ settingsRoutes.get('/', asyncHandler(async (req, res) => {
 
 settingsRoutes.get('/availability', validate(availabilityQuerySchema, 'query'), asyncHandler(async (req, res) => {
   ok(res, { availability: await getStoreAvailability(req.query) }, 'Store availability loaded');
+}));
+
+settingsRoutes.get('/admin', requireAuth, authorize('admin', 'manager'), asyncHandler(async (_req, res) => {
+  ok(res, { settings: await getStoreSettings() }, 'Admin store settings loaded');
 }));
 
 settingsRoutes.patch('/', requireAuth, authorize('admin', 'manager'), validate(storeSettingsSchema), asyncHandler(async (req, res) => {

@@ -5,6 +5,7 @@ import { initiateOrderRefund } from '../payments/payment.service.js';
 import { SupportTicket } from './supportTicket.model.js';
 import { matchesPickupOtp, pickupOtpForTicket } from './pickup-otp.service.js';
 import { androidVisibleOrderFilter, combineMongoFilters } from '../catalog/paanCorner.visibility.js';
+import { deliveredOrderSupportPolicy } from './support-window.js';
 
 function customerTicketPayload(ticket) {
   const payload = typeof ticket.toObject === 'function' ? ticket.toObject() : { ...ticket };
@@ -12,29 +13,57 @@ function customerTicketPayload(ticket) {
   return payload;
 }
 
-export async function createSupportTicket(customer, payload, { excludePaanCorner = false } = {}) {
+function supportPolicyError(policy) {
+  if (policy.reasonCode === 'SUPPORT_TICKET_DELIVERY_REQUIRED') {
+    return new AppError('Support tickets for item issues are available after delivery.', 409, policy.reasonCode);
+  }
+  if (policy.reasonCode === 'SUPPORT_TICKET_WINDOW_EXPIRED') {
+    return new AppError('The five-hour support window for this order has closed.', 409, policy.reasonCode);
+  }
+  return new AppError('The verified delivery time is unavailable, so a support ticket cannot be opened safely.', 409, 'SUPPORT_TICKET_DELIVERY_TIME_UNAVAILABLE');
+}
+
+export async function assertCustomerSupportEligibility(customer, orderId, { excludePaanCorner = false, now = new Date() } = {}) {
   const order = await Order.findOne(combineMongoFilters(
-    { _id: payload.orderId, customer: customer._id },
+    { _id: orderId, customer: customer._id },
     excludePaanCorner ? androidVisibleOrderFilter() : null,
   ));
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
-  if (order.status !== 'delivered') {
-    throw new AppError('Support tickets for item issues are available after delivery.', 409, 'SUPPORT_TICKET_DELIVERY_REQUIRED');
-  }
+  const policy = deliveredOrderSupportPolicy(order, now);
+  if (!policy.eligible) throw supportPolicyError(policy);
+  return { order, policy };
+}
+
+export async function createSupportTicket(customer, payload, { excludePaanCorner = false } = {}) {
+  const { order } = await assertCustomerSupportEligibility(customer, payload.orderId, { excludePaanCorner });
   const existing = await SupportTicket.findOne({
     order: order._id,
     customer: customer._id,
     status: { $in: ['open', 'pickup_scheduled', 'processing', 'refund_pending', 'refund_failed'] },
   });
   if (existing) throw new AppError('An active support ticket already exists for this order.', 409, 'SUPPORT_TICKET_ALREADY_OPEN');
-  return SupportTicket.create({
-    order: order._id,
-    customer: customer._id,
-    activeOrderKey: String(order._id),
-    category: payload.category,
-    description: payload.description,
-    proofImages: payload.proofImages,
-  });
+
+  // Recheck immediately before the write so time spent on the duplicate lookup
+  // cannot extend the server-owned deadline.
+  const policy = deliveredOrderSupportPolicy(order, new Date());
+  if (!policy.eligible) throw supportPolicyError(policy);
+  try {
+    return await SupportTicket.create({
+      order: order._id,
+      customer: customer._id,
+      activeOrderKey: String(order._id),
+      orderDeliveredAt: new Date(policy.deliveredAt),
+      submissionDeadline: new Date(policy.closesAt),
+      category: payload.category,
+      description: payload.description,
+      proofImages: payload.proofImages,
+    });
+  } catch (error) {
+    if (error?.code === 11000 && error?.keyPattern?.activeOrderKey) {
+      throw new AppError('An active support ticket already exists for this order.', 409, 'SUPPORT_TICKET_ALREADY_OPEN');
+    }
+    throw error;
+  }
 }
 
 export async function listCustomerSupportTickets(customer, { excludePaanCorner = false } = {}) {

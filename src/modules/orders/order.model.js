@@ -54,6 +54,12 @@ const orderSchema = new mongoose.Schema({
   paymentMethod: { type: String, enum: ['razorpay', 'cod'], required: true },
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refund_pending', 'refund_failed', 'partially_refunded', 'refunded', 'cod_refund_approved'], default: 'pending' },
   paymentIntent: { type: mongoose.Schema.Types.ObjectId, ref: 'PaymentIntent' },
+  paymentProcessingFee: {
+    amountPaise: { type: Number, min: 0 },
+    taxPaise: { type: Number, min: 0 },
+    source: { type: String, enum: ['razorpay_payment'] },
+    capturedAt: Date,
+  },
   restrictedProductConsent: {
     consent: { type: mongoose.Schema.Types.ObjectId, ref: 'RestrictedProductConsent' },
     policyVersion: String,
@@ -71,6 +77,7 @@ const orderSchema = new mongoose.Schema({
     grossPaidAmount: { type: Number, min: 0 },
     cancellationFeeRate: { type: Number, min: 0, max: 100 },
     cancellationFeeAmount: { type: Number, min: 0 },
+    cancellationFeeSource: { type: String, enum: ['razorpay_payment'] },
     initiatedBy: { type: String, enum: ['customer', 'staff', 'system'] },
     reason: String,
     arn: String,
@@ -90,6 +97,7 @@ const orderSchema = new mongoose.Schema({
     at: { type: Date, default: Date.now },
   }],
   status: { type: String, enum: ORDER_STATUSES, default: 'placed', index: true },
+  deliveredAt: { type: Date, index: true },
   statusTimeline: [{
     status: { type: String, enum: ORDER_STATUSES },
     note: String,

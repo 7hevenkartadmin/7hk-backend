@@ -454,7 +454,7 @@ test('late capture webhook uses monotonic Payment and Order filters', async () =
   assert.deepEqual(orderFilter.status, { $ne: 'cancelled' });
 });
 
-test('customer prepaid cancellation restores fulfilment resources and queues only the 90 percent refund', async () => {
+test('customer prepaid cancellation restores fulfilment resources and deducts only the captured Razorpay fee', async () => {
   const { DeliverySlot } = await import('../src/modules/delivery/deliverySlot.model.js');
   const { cancelOrder } = await import('../src/modules/orders/order.service.js');
   const { Order } = await import('../src/modules/orders/order.model.js');
@@ -485,6 +485,12 @@ test('customer prepaid cancellation restores fulfilment resources and queues onl
     paymentMethod: 'razorpay',
     paymentStatus: 'paid',
     paymentIntent: intentId,
+    paymentProcessingFee: {
+      amountPaise: 236,
+      taxPaise: 36,
+      source: 'razorpay_payment',
+      capturedAt: new Date(),
+    },
     couponCode: 'ONCEONLY',
     total: 100,
     async save() { return this; },
@@ -525,12 +531,13 @@ test('customer prepaid cancellation restores fulfilment resources and queues onl
   assert.equal(order.statusTimeline.length, 1);
   assert.equal(intent.status, 'refund_pending');
   assert.equal(intent.refundReason, 'CUSTOMER_CANCELLED_BEFORE_PACKED');
-  assert.equal(intent.refundTargetPaise, 9000);
-  assert.equal(intent.refundAmountPaise, 9000);
+  assert.equal(intent.refundTargetPaise, 9764);
+  assert.equal(intent.refundAmountPaise, 9764);
   assert.equal(order.refund.grossPaidAmount, 100);
-  assert.equal(order.refund.cancellationFeeRate, 10);
-  assert.equal(order.refund.cancellationFeeAmount, 10);
-  assert.equal(order.refund.amount, 90);
+  assert.equal(order.refund.cancellationFeeRate, 2.36);
+  assert.equal(order.refund.cancellationFeeAmount, 2.36);
+  assert.equal(order.refund.cancellationFeeSource, 'razorpay_payment');
+  assert.equal(order.refund.amount, 97.64);
   assert.equal(order.refund.initiatedBy, 'customer');
   assert.equal(intent.reservation.state, 'consumed');
 });
