@@ -16,13 +16,13 @@ import {
 const SKU_WRITE_ATTEMPTS = 5;
 
 const sortMap = {
-  popularity: { popularity: -1, createdAt: -1 },
-  price_asc: { price: 1 },
-  price_desc: { price: -1 },
-  discount: { discount: -1 },
-  newest: { createdAt: -1 },
-  name_asc: { name: 1 },
-  stock_asc: { availableStock: 1, name: 1 },
+  popularity: { popularity: -1, createdAt: -1, _id: 1 },
+  price_asc: { price: 1, _id: 1 },
+  price_desc: { price: -1, _id: 1 },
+  discount: { discount: -1, _id: 1 },
+  newest: { createdAt: -1, _id: 1 },
+  name_asc: { name: 1, _id: 1 },
+  stock_asc: { availableStock: 1, name: 1, _id: 1 },
 };
 
 function escapeRegex(value) {
