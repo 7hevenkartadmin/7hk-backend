@@ -19,7 +19,7 @@ test('validation middleware replaces request source with parsed data', () => {
   assert.deepEqual(req.query, { limit: 50, includeInactive: true });
 });
 
-test('validation middleware forwards AppError with flattened zod details', () => {
+test('validation middleware forwards safe flattened and structured zod details', () => {
   const schema = z.object({ phone: z.string().min(10) });
   const req = { body: { phone: '123' } };
   let nextError = null;
@@ -31,4 +31,8 @@ test('validation middleware forwards AppError with flattened zod details', () =>
   assert.equal(nextError.statusCode, 422);
   assert.equal(nextError.code, 'VALIDATION_ERROR');
   assert.ok(nextError.details.fieldErrors.phone.length > 0);
+  assert.deepEqual(nextError.details.issues[0].path, ['phone']);
+  assert.equal(nextError.details.issues[0].code, 'too_small');
+  assert.equal(nextError.details.issues[0].type, 'string');
+  assert.equal(nextError.details.issues[0].minimum, 10);
 });

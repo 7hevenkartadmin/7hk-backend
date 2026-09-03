@@ -62,6 +62,22 @@ test('catalog validation strips client-controlled product and variant SKUs', () 
   assert.equal(Object.hasOwn(parsed.variants[0], 'sku'), false);
 });
 
+test('catalog validation explains search tag character and item limits', () => {
+  const baseProduct = {
+    name: 'Test Rice', category: 'grains', mrp: 200, price: 180, unit: '1 kg',
+  };
+  const longTag = productSchema.safeParse({ ...baseProduct, tags: ['x'.repeat(121)] });
+  assert.equal(longTag.success, false);
+  assert.equal(longTag.error.issues[0].message, 'Each search tag can contain at most 120 characters');
+
+  const tooManyTags = productSchema.safeParse({
+    ...baseProduct,
+    tags: Array.from({ length: 21 }, (_, index) => `tag-${index}`),
+  });
+  assert.equal(tooManyTags.success, false);
+  assert.equal(tooManyTags.error.issues[0].message, 'You can add at most 20 search tags');
+});
+
 test('product model generates a SKU fallback and rejects duplicate SKUs inside one product', async () => {
   const generated = new Product({
     name: 'Generated SKU Product', slug: 'generated-sku-product', category: 'test',

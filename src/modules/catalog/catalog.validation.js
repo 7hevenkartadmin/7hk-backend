@@ -61,7 +61,11 @@ export const productSchema = z.object({
   }).optional(),
   variants: z.array(variantSchema).max(30).default([]),
   highlights: z.array(z.string().min(1).max(120)).max(12).default([]),
-  tags: z.array(z.string().min(1).max(40)).max(20).default([]),
+  tags: z.array(
+    z.string()
+      .min(1, 'Search tags cannot be empty')
+      .max(120, 'Each search tag can contain at most 120 characters'),
+  ).max(20, 'You can add at most 20 search tags').default([]),
   manufacturer: z.string().max(120).default(''),
   countryOfOrigin: z.string().max(80).default('India'),
   shelfLife: z.string().max(80).default(''),

@@ -168,7 +168,19 @@ function searchFilter(searchText) {
 
   if (terms.length === 0) return null;
 
-  const fields = ['name', 'description', 'brand', 'category', 'sku', 'barcode.value', 'variants.sku', 'variants.barcode.value', 'tags'];
+  const fields = [
+    'name',
+    'description',
+    'brand',
+    'category',
+    'sku',
+    'barcode.value',
+    'variants.title',
+    'variants.unit',
+    'variants.sku',
+    'variants.barcode.value',
+    'tags',
+  ];
   return {
     $and: terms.map((term) => {
       const pattern = new RegExp(escapeRegex(term), 'i');
@@ -313,14 +325,25 @@ export async function searchSuggestions(query, options = {}) {
   const suggestions = [];
   const seen = new Set();
 
-  const add = (keyword, product, kind = 'keyword') => {
+  const matchingVariant = (product, keyword) => {
+    const needle = String(keyword || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+    if (!needle) return null;
+    return (product?.variants || []).find((variant) => {
+      if (variant.isActive === false) return false;
+      const title = String(variant.title || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+      return Boolean(title) && (title.includes(needle) || needle.includes(title));
+    }) || null;
+  };
+
+  const add = (keyword, product, kind = 'keyword', sourceVariant = null) => {
     const value = String(keyword || '').replace(/\s+/g, ' ').trim();
     const key = value.toLocaleLowerCase();
     if (value.length < 2 || seen.has(key) || !key.includes(normalizedQuery)) return;
+    const variant = sourceVariant || matchingVariant(product, value);
     seen.add(key);
     suggestions.push({
       keyword: value,
-      image: product?.image || product?.gallery?.[0] || '',
+      image: variant?.images?.[0] || product?.image || product?.gallery?.[0] || '',
       kind,
     });
   };
@@ -328,6 +351,9 @@ export async function searchSuggestions(query, options = {}) {
   for (const product of result.items) {
     add(product.name, product, 'product');
     add(product.brand, product, 'brand');
+    for (const variant of product.variants || []) {
+      if (variant.isActive !== false) add(variant.title, product, 'variant', variant);
+    }
     for (const tag of product.tags || []) add(tag, product, 'tag');
   }
 
