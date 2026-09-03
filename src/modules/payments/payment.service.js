@@ -202,6 +202,7 @@ async function hydrateCheckoutItems(inputItems, { excludePaanCorner = false } = 
     return {
       product, variant, quantity: item.quantity, price: variant?.price ?? product.price,
       mrp: variant?.mrp ?? product.mrp, taxRate: product.taxRate, name: product.name,
+      variantTitle: variant?.title || '',
       sku: variant?.sku ?? product.sku, unit: variant?.unit ?? product.unit,
       image: variant?.images?.[0] || product.image,
     };
@@ -402,7 +403,7 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
     items: items.map((item) => ({
       productId: String(item.product._id), variantId: item.variant?._id ? String(item.variant._id) : '',
       quantity: item.quantity, price: item.price, mrp: item.mrp, taxRate: item.taxRate,
-      name: item.name, sku: item.sku, unit: item.unit, image: item.image, category: item.product.category,
+      name: item.name, variantTitle: item.variantTitle, sku: item.sku, unit: item.unit, image: item.image, category: item.product.category,
       categorySlug: item.product.categoryRef?.slug,
     })),
     couponCode: String(payload.couponCode || '').trim().toUpperCase(),

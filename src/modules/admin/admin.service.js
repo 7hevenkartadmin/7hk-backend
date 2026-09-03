@@ -4,6 +4,7 @@ import { parseStoreDate, storeDateKey, todayStoreRange } from '../../shared/util
 import { Product } from '../catalog/product.model.js';
 import { Order } from '../orders/order.model.js';
 import { PaymentIntent } from '../payments/paymentIntent.model.js';
+import { User } from '../users/user.model.js';
 
 export const REVENUE_FILTER = {
   status: { $ne: 'cancelled' },
@@ -132,7 +133,7 @@ export async function getDashboardStats(period = 'weekly') {
   const periodRevenueFilter = { ...REVENUE_FILTER, createdAt: { $gte: revenueStart } };
   const [
     totalOrders, todayOrders, pendingOrders, deliveredOrders, cancelledOrders,
-    totalRevenueRows, todayRevenueRows, totalProducts, activeProducts,
+    totalRevenueRows, todayRevenueRows, totalProducts, activeProducts, totalCustomers,
     inventoryRows, recentOrders, revenueRows, periodSummaryRows,
     categoryRows, topProductRows, hourlyRows,
     refundPendingCount, refundFailedCount, recentPaymentExceptions,
@@ -146,6 +147,7 @@ export async function getDashboardStats(period = 'weekly') {
     Order.aggregate([{ $match: { ...REVENUE_FILTER, createdAt: { $gte: today.start, $lt: today.end } } }, { $group: { _id: null, value: { $sum: '$total' } } }]),
     Product.countDocuments(),
     Product.countDocuments(activeFilter),
+    User.countDocuments({ role: 'customer' }),
     Product.aggregate(buildInventoryDashboardPipeline()),
     Order.find().sort({ createdAt: -1 }).limit(5).lean(),
     Order.aggregate([
@@ -189,6 +191,7 @@ export async function getDashboardStats(period = 'weekly') {
       healthy: variantCounts.healthy,
       threshold: env.LOW_STOCK_THRESHOLD,
     },
+    customers: { total: totalCustomers },
     recentOrders,
     outOfStockItems,
     lowStockItems,

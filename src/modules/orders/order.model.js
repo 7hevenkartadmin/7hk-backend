@@ -5,6 +5,7 @@ export const ORDER_STATUSES = ['placed', 'confirmed', 'packed', 'out_for_deliver
 const orderItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   variantId: { type: mongoose.Schema.Types.ObjectId },
+  variantTitle: { type: String, default: '' },
   name: { type: String, required: true },
   sku: { type: String, required: true },
   unit: { type: String, required: true },

@@ -31,7 +31,7 @@ test('online order schema requires Razorpay payment proof', () => {
     address: {
       recipientName: 'Aman',
       phone: '9876543210',
-      line1: '7 Heaven Store Road',
+      line1: '7 Heven Store Road',
       city: 'Singhwahini',
       pincode: '843324',
       latitude: 26.713,

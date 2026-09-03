@@ -6,6 +6,7 @@ import { Product } from '../src/modules/catalog/product.model.js';
 import { listProducts } from '../src/modules/catalog/catalog.service.js';
 import { Order } from '../src/modules/orders/order.model.js';
 import { PaymentIntent } from '../src/modules/payments/paymentIntent.model.js';
+import { User } from '../src/modules/users/user.model.js';
 import { parseStoreDate } from '../src/shared/utils/storeDate.js';
 
 function withStubs(stubs, callback) {
@@ -127,6 +128,7 @@ test('dashboard statistics count active variants and return separate inventory c
   await withStubs([
     { object: Order, method: 'countDocuments', implementation: async () => orderCounts[orderCountIndex++] },
     { object: Product, method: 'countDocuments', implementation: async () => productCounts[productCountIndex++] },
+    { object: User, method: 'countDocuments', implementation: async (filter) => { assert.deepEqual(filter, { role: 'customer' }); return 186; } },
     { object: Order, method: 'aggregate', implementation: async () => aggregates[aggregateIndex++] },
     { object: Product, method: 'aggregate', implementation: async (pipeline) => { assert.deepEqual(pipeline, buildInventoryDashboardPipeline()); return inventoryResult; } },
     { object: Order, method: 'find', implementation: () => recentQuery },
@@ -144,6 +146,7 @@ test('dashboard statistics count active variants and return separate inventory c
       healthy: 417,
       threshold: 20,
     });
+    assert.deepEqual(stats.customers, { total: 186 });
     assert.equal(stats.outOfStockItems[0].status, 'out_of_stock');
     assert.equal(stats.lowStockItems[0].availableStock, 2);
     assert.equal(stats.revenue.total, 845620);

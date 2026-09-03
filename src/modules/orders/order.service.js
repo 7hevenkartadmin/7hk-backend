@@ -160,6 +160,7 @@ async function hydrateItems(inputItems, session, { checkAvailability = true, exc
       mrp: variant?.mrp ?? product.mrp,
       taxRate: product.taxRate,
       name: product.name,
+      variantTitle: variant?.title || '',
       sku: variant?.sku ?? product.sku,
       unit: variant?.unit ?? product.unit,
       image: variant?.images?.[0] || product.image,
@@ -187,6 +188,7 @@ function applyCheckoutSnapshot(items, snapshot) {
       mrp: paidItem.mrp,
       taxRate: paidItem.taxRate,
       name: paidItem.name,
+      variantTitle: paidItem.variantTitle || item.variantTitle || '',
       sku: paidItem.sku,
       unit: paidItem.unit,
       image: paidItem.image,
@@ -227,10 +229,11 @@ export async function quoteOrder(customer, payload, { excludePaanCorner = false 
     : defaultDeliveryFee(subtotalOnly);
   const totals = calculateCartTotals({ items, couponDiscount: discount, deliveryFee });
   return {
-    items: items.map(({ product, variant, quantity, maxOrderableQuantity: safeMaximum, price, mrp, taxRate, sku, unit, image }) => ({
+    items: items.map(({ product, variant, quantity, maxOrderableQuantity: safeMaximum, price, mrp, taxRate, variantTitle, sku, unit, image }) => ({
       product: product.id,
       variantId: variant?._id,
       name: product.name,
+      variantTitle,
       sku,
       unit,
       image,
@@ -385,9 +388,10 @@ async function performCreateOrder(customer, payload, session, { excludePaanCorne
     orderNumber: `ORD-${orderId()}`,
     customer: customer._id,
     customerSnapshot: { name: customer.name, phone: customer.phone, email: customer.email },
-    items: items.map(({ product, variant, quantity, price, mrp, taxRate, name, sku, unit, image }) => ({
+    items: items.map(({ product, variant, quantity, price, mrp, taxRate, name, variantTitle, sku, unit, image }) => ({
       product: product._id,
       variantId: variant?._id,
+      variantTitle,
       quantity,
       price,
       mrp,
