@@ -25,11 +25,11 @@ import { maxOrderableQuantity, netAvailableStock } from '../../shared/utils/inve
 import { publishInventoryChange } from '../../shared/realtime/inventory.events.js';
 import { publishOrderChange } from '../../shared/realtime/order.events.js';
 import { Order } from './order.model.js';
-import { buildInvoice } from './invoice.service.js';
-import { calculateCartTotals, defaultDeliveryFee } from './pricing.service.js';
+import { issueOrderInvoice, primeTaxSeries, recordOrderCancellation } from '../taxes/tax.service.js';
+import { calculateCartTotals } from './pricing.service.js';
 import { distanceInKm } from '../../shared/utils/distance.js';
 import { env } from '../../config/env.js';
-import { deliveryFeeForDistance, getCodSettings } from '../settings/settings.service.js';
+import { deliveryFeeForCart, getCodSettings } from '../settings/settings.service.js';
 import { assertStoreAcceptingOrders, getStoreAvailability } from '../settings/storeAvailability.service.js';
 import { PaymentIntent } from '../payments/paymentIntent.model.js';
 import { User } from '../users/user.model.js';
@@ -142,6 +142,7 @@ async function hydrateItems(inputItems, session, { checkAvailability = true, exc
   return inputItems.map((item) => {
     const product = byId.get(item.productId);
     if (!product) throw new AppError('Product not found in cart', 404, 'PRODUCT_NOT_FOUND');
+    if (checkAvailability && product.taxStatus === 'review') throw new AppError(`${product.name} is awaiting tax classification. Please remove it or contact support.`, 409, 'TAX_CLASSIFICATION_PENDING');
     const variant = purchasableVariant(product, item.variantId);
     const target = variant || product;
     const available = netAvailableStock(target.stock, target.reservedStock);
@@ -158,7 +159,7 @@ async function hydrateItems(inputItems, session, { checkAvailability = true, exc
       maxOrderableQuantity: safeMaximum,
       price: variant?.price ?? product.price,
       mrp: variant?.mrp ?? product.mrp,
-      taxRate: product.taxRate,
+      taxRate: product.taxRate, hsnCode: product.hsnCode,
       name: product.name,
       variantTitle: variant?.title || '',
       sku: variant?.sku ?? product.sku,
@@ -186,7 +187,7 @@ function applyCheckoutSnapshot(items, snapshot) {
       ...item,
       price: paidItem.price,
       mrp: paidItem.mrp,
-      taxRate: paidItem.taxRate,
+      taxRate: paidItem.taxRate, hsnCode: paidItem.hsnCode,
       name: paidItem.name,
       variantTitle: paidItem.variantTitle || item.variantTitle || '',
       sku: paidItem.sku,
@@ -194,6 +195,18 @@ function applyCheckoutSnapshot(items, snapshot) {
       image: paidItem.image,
     };
   });
+}
+
+export function checkoutTotalsForItems(items, snapshot) {
+  if (![2, 3, 4].includes(snapshot.totals.pricingVersion)) return snapshot.totals;
+  const byItem = new Map(snapshot.items.map((item, index) => [
+    `${item.productId}:${item.variantId || ''}`, snapshot.totals.gstLines?.[index],
+  ]));
+  const gstLines = items.map((item) => byItem.get(`${item.product._id}:${item.variant?._id || ''}`));
+  if (gstLines.some((line) => !line)) {
+    throw new AppError('Payment GST snapshot does not match the cart', 409, 'PAYMENT_SNAPSHOT_MISSING');
+  }
+  return { ...snapshot.totals, gstLines };
 }
 
 export async function quoteOrder(customer, payload, { excludePaanCorner = false } = {}) {
@@ -224,12 +237,10 @@ export async function quoteOrder(customer, payload, { excludePaanCorner = false 
   const selectedAddress = payload.addressId ? await findOwnedAddress(customer._id, payload.addressId) : null;
   if (payload.addressId && !selectedAddress) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   await assertStoreAcceptingOrders({ distanceKm: selectedAddress?.distanceFromStoreKm });
-  const deliveryFee = selectedAddress
-    ? (subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(selectedAddress.distanceFromStoreKm, defaultDeliveryFee(subtotalOnly)))
-    : defaultDeliveryFee(subtotalOnly);
+  const deliveryFee = await deliveryFeeForCart(subtotalOnly, selectedAddress?.distanceFromStoreKm);
   const totals = calculateCartTotals({ items, couponDiscount: discount, deliveryFee });
   return {
-    items: items.map(({ product, variant, quantity, maxOrderableQuantity: safeMaximum, price, mrp, taxRate, variantTitle, sku, unit, image }) => ({
+    items: items.map(({ product, variant, quantity, maxOrderableQuantity: safeMaximum, price, mrp, taxRate, hsnCode, variantTitle, sku, unit, image }) => ({
       product: product.id,
       variantId: variant?._id,
       name: product.name,
@@ -243,6 +254,7 @@ export async function quoteOrder(customer, payload, { excludePaanCorner = false 
       price,
       mrp,
       taxRate,
+      hsnCode,
     })),
     coupon: coupon ? { code: coupon.code, discount } : null,
     totals,
@@ -259,6 +271,7 @@ export async function createOrder(customer, payload, { excludePaanCorner = false
     ));
     if (existingOrder) return { order: existingOrder, payment: null };
   }
+  await primeTaxSeries();
   const session = await mongoose.startSession();
   let result;
   try {
@@ -277,10 +290,7 @@ export async function createOrder(customer, payload, { excludePaanCorner = false
       }
       throw error;
     }
-    if (env.NODE_ENV === 'production') {
-      throw new AppError('Order database transactions are unavailable', 503, 'ORDER_TRANSACTION_UNAVAILABLE');
-    }
-    result = await performCreateOrder(customer, payload, undefined, { excludePaanCorner });
+    throw new AppError('Order database transactions are unavailable. A MongoDB replica set is required for safe invoice issuance.', 503, 'ORDER_TRANSACTION_UNAVAILABLE');
   } finally {
     await session.endSession();
   }
@@ -318,7 +328,7 @@ async function performCreateOrder(customer, payload, session, { excludePaanCorne
       checkAvailability: false,
       excludePaanCorner,
     }), paymentPreview.checkoutSnapshot);
-    totals = paymentPreview.checkoutSnapshot.totals;
+    totals = checkoutTotalsForItems(items, paymentPreview.checkoutSnapshot);
     couponCode = paymentPreview.checkoutSnapshot.couponCode || undefined;
     slot = await getReservedSlotForIntent(paymentPreview, session);
   } else {
@@ -349,10 +359,7 @@ async function performCreateOrder(customer, payload, session, { excludePaanCorne
   if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   const deliveryAddress = deliveryAddressForOrder(payload.paymentMethod, address, paymentPreview?.checkoutSnapshot);
   if (payload.paymentMethod === 'cod') {
-    const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(
-      deliveryAddress.distanceFromStoreKm,
-      defaultDeliveryFee(subtotalOnly),
-    );
+    const deliveryFee = await deliveryFeeForCart(subtotalOnly, deliveryAddress.distanceFromStoreKm);
     totals = calculateCartTotals({ items, couponDiscount, deliveryFee });
   }
   await assertOrderAvailability(customer, payload, deliveryAddress.distanceFromStoreKm, session);
@@ -388,7 +395,7 @@ async function performCreateOrder(customer, payload, session, { excludePaanCorne
     orderNumber: `ORD-${orderId()}`,
     customer: customer._id,
     customerSnapshot: { name: customer.name, phone: customer.phone, email: customer.email },
-    items: items.map(({ product, variant, quantity, price, mrp, taxRate, name, variantTitle, sku, unit, image }) => ({
+    items: items.map(({ product, variant, quantity, price, mrp, taxRate, hsnCode, name, variantTitle, sku, unit, image }) => ({
       product: product._id,
       variantId: variant?._id,
       variantTitle,
@@ -396,6 +403,7 @@ async function performCreateOrder(customer, payload, session, { excludePaanCorne
       price,
       mrp,
       taxRate,
+      hsnCode,
       name,
       sku,
       unit,
@@ -439,8 +447,6 @@ async function performCreateOrder(customer, payload, session, { excludePaanCorne
   }
   const changes = inventoryChanges(mutation.products, 'stock.decremented', quantityByProduct);
 
-  order.invoice = buildInvoice(order);
-  await order.save({ session });
   if (payload.paymentMethod === 'razorpay') {
     await createCapturedRazorpayPaymentForOrder(order, paymentIntent, session);
     order.paymentStatus = 'paid';
@@ -449,6 +455,8 @@ async function performCreateOrder(customer, payload, session, { excludePaanCorne
   } else {
     await createPaymentForOrder(order, session);
   }
+  order.invoice = await issueOrderInvoice(order, session);
+  await order.save({ session });
   return { order, payment: null, inventoryChanges: changes };
 }
 
@@ -594,6 +602,7 @@ export async function verifyDeliveryOtp(id, otp, actor, { restrictedProductCheck
 }
 
 export async function cancelOrder(id, payload, actor, { customerInitiated = false, excludePaanCorner = false } = {}) {
+  await primeTaxSeries();
   const session = await mongoose.startSession();
   let order;
   let changes = [];
@@ -713,6 +722,7 @@ export async function cancelOrder(id, payload, actor, { customerInitiated = fals
           };
         }
       }
+      await recordOrderCancellation(order, actor, session);
       await order.save({ session });
       changed = true;
     });

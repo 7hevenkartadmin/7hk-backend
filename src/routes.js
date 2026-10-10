@@ -15,6 +15,7 @@ import { whatsappWebhookRoutes } from './modules/auth/whatsapp.webhook.js';
 import { razorpayWebhookRoutes } from './modules/payments/razorpay.webhook.js';
 import { adminSecurityRoutes, ownerRoutes } from './modules/owner/owner.routes.js';
 import { supportTicketRoutes } from './modules/support/supportTicket.routes.js';
+import { taxRoutes } from './modules/taxes/tax.routes.js';
 
 export const routes = Router();
 
@@ -33,5 +34,6 @@ routes.use('/addresses', addressRoutes);
 routes.use('/realtime', realtimeRoutes);
 routes.use('/settings', settingsRoutes);
 routes.use('/support-tickets', supportTicketRoutes);
+routes.use('/taxes', taxRoutes);
 routes.use('/webhooks/whatsapp', whatsappWebhookRoutes);
 routes.use('/webhooks/razorpay', razorpayWebhookRoutes);

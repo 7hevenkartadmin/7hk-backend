@@ -1,3 +1,5 @@
+import { defaultFreeDeliveryThreshold } from '../settings/settings.defaults.js';
+
 function comparableVariant(variant = {}) {
   return {
     key: String(variant.sku || variant._id || variant.title || ''),
@@ -16,9 +18,10 @@ function productPriceSignature(value = {}) {
 }
 
 function deliveryChargeSignature(value = {}) {
-  return (Array.isArray(value.deliveryZones) ? value.deliveryZones : [])
+  const zones = (Array.isArray(value.deliveryZones) ? value.deliveryZones : [])
     .map((zone) => ({ code: String(zone.code || zone._id || ''), charge: Number(zone.charge || 0) }))
     .sort((left, right) => left.code.localeCompare(right.code));
+  return { zones, freeDeliveryThreshold: value.freeDeliveryThreshold ?? defaultFreeDeliveryThreshold };
 }
 
 export const CRITICAL_AUDIT_TYPES = ['product_price', 'coupon_creation', 'delivery_charge'];
@@ -40,9 +43,9 @@ function legacyDeliveryChargeFilter() {
   return {
     criticalType: { $exists: false },
     action: 'settings.update',
-    $expr: { $ne: [
-      { $ifNull: ['$before.deliveryZones.charge', []] },
-      { $ifNull: ['$after.deliveryZones.charge', []] },
+    $expr: { $or: [
+      { $ne: [{ $ifNull: ['$before.deliveryZones.charge', []] }, { $ifNull: ['$after.deliveryZones.charge', []] }] },
+      { $ne: [{ $ifNull: ['$before.freeDeliveryThreshold', defaultFreeDeliveryThreshold] }, { $ifNull: ['$after.freeDeliveryThreshold', defaultFreeDeliveryThreshold] }] },
     ] },
   };
 }

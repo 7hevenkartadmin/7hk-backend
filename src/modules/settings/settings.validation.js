@@ -119,9 +119,10 @@ export const storeSettingsSchema = z.object({
   }).optional(),
   homepageBannerSections: bannerSectionsSchema.optional(),
   deliveryZones: deliveryZonesSchema.optional(),
+  freeDeliveryThreshold: z.number().finite().min(0).max(100000).multipleOf(0.01).optional(),
   codSettings: codSettingsSchema.optional(),
   orderingSchedule: orderingScheduleSchema.optional(),
-}).refine((data) => data.homepageBanners || data.homepageBannerSections || data.deliveryZones || data.codSettings || data.orderingSchedule, {
+}).refine((data) => data.freeDeliveryThreshold !== undefined || data.homepageBanners || data.homepageBannerSections || data.deliveryZones || data.codSettings || data.orderingSchedule, {
   message: 'At least one setting group is required',
 });
 

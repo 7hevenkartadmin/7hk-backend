@@ -58,7 +58,14 @@ const productSchema = new mongoose.Schema({
   isFeatured: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true, index: true },
   popularity: { type: Number, default: 0 },
+  hsnCode: { type: String, trim: true, default: '', validate: { validator: (value) => !value || /^(?:\d{4}|\d{6}|\d{8})$/.test(value), message: 'HSN must contain 4, 6 or 8 digits' } },
   taxRate: { type: Number, min: 0, max: 100, default: 0 },
+  taxProfile: { type: String, default: '' },
+  taxOrigin: { type: String, enum: ['subcategory', 'override', 'legacy'], default: 'legacy' },
+  taxStatus: { type: String, enum: ['verified', 'estimated', 'review', 'legacy'], default: 'legacy', index: true },
+  taxSource: { type: String, default: '' },
+  taxReviewedAt: Date,
+  taxReviewReason: { type: String, default: '' },
 }, { timestamps: true });
 
 productSchema.pre('validate', function syncDefaultVariant() {

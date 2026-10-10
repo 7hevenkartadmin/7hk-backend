@@ -1,9 +1,2 @@
-export function buildInvoice(order) {
-  const issuedAt = new Date();
-  const number = `INV-${issuedAt.getFullYear()}-${order.orderNumber}`;
-  return {
-    number,
-    issuedAt,
-    url: `/api/v1/orders/${order.id}/invoice`,
-  };
-}
+// Keep older imports on the canonical, persisted-invoice path.
+export { buildInvoice } from './invoice.service.js';

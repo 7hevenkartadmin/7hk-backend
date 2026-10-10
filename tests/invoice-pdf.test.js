@@ -91,5 +91,6 @@ test('customer invoice download streams a private A4 PDF with a stable filename'
   assert.equal(headers['Content-Disposition'], 'attachment; filename="INV-2026-ORD-INVOICE01.pdf"');
   assert.equal(headers['Cache-Control'], 'private, no-store');
   assert.equal(pdf.subarray(0, 8).toString('ascii').startsWith('%PDF-'), true);
-  assert.ok(pdf.length > 5_000);
+  assert.match(pdf.toString('latin1'), /\/MediaBox \[0 0 595\.28 841\.89\]/);
+  assert.match(pdf.toString('latin1'), /%%EOF/);
 });

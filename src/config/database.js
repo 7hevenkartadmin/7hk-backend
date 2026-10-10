@@ -2,6 +2,17 @@ import mongoose from 'mongoose';
 import { env } from './env.js';
 
 const REQUIRED_PRODUCTION_INDEXES = [
+  ['taxdocuments', { eventKey: 1 }, { name: 'tax_document_event_unique' }],
+  ['taxdocuments', { issuerGstin: 1, financialYear: 1, number: 1 }, { name: 'tax_document_number_unique' }],
+  ['taxdocuments', { kind: 1, order: 1 }, { name: 'tax_order_invoice_unique', partialFilterExpression: { kind: 'INVOICE' } }],
+  ['taxdocuments', { issuedAt: 1, _id: 1 }, { name: 'tax_document_date', unique: false }],
+  ['taxdocuments', { original: 1 }, { name: 'tax_document_original', unique: false }],
+  ['invoicecounters', { sequence: 1 }, { name: 'tax_counter_sequence', unique: false }],
+  ['gstfilings', { period: 1, createdAt: -1 }, { name: 'gst_filing_period', unique: false }],
+  ['gstfilingevents', { filing: 1, returnType: 1 }, { name: 'gst_filing_return_unique' }],
+  ['gstfilingevents', { period: 1, returnType: 1 }, { name: 'gst_period_return_unique' }],
+  ['taxclassifications', { eventKey: 1 }, { name: 'tax_classification_event_unique' }],
+  ['taxclassifications', { document: 1, createdAt: -1 }, { name: 'tax_classification_document', unique: false }],
   ['users', { phone: 1 }, {
     name: 'user_phone_unique_when_present',
     partialFilterExpression: { phone: { $type: 'string' } },

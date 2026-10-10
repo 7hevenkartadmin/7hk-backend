@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { adminOrdersQuerySchema } from '../src/modules/admin/admin.validation.js';
-import { buildAdminOrderFilter, buildInventoryDashboardPipeline, getDashboardStats, listAdminOrders, REVENUE_FILTER } from '../src/modules/admin/admin.service.js';
+import { buildAdminOrderFilter, buildDashboardPeriodSummaryPipeline, buildInventoryDashboardPipeline, getDashboardStats, listAdminOrders, REVENUE_FILTER } from '../src/modules/admin/admin.service.js';
 import { Product } from '../src/modules/catalog/product.model.js';
 import { listProducts } from '../src/modules/catalog/catalog.service.js';
 import { Order } from '../src/modules/orders/order.model.js';
@@ -104,7 +104,7 @@ test('dashboard statistics count active variants and return separate inventory c
   const aggregates = [
     [{ value: 845620 }], [{ value: 12450 }],
     [{ _id: '2026-08-14', revenue: 12450, orders: 18 }],
-    [{ revenue: 12450, orders: 18, customers: ['a', 'b'] }],
+    [{ revenue: 12450, orders: 18, customers: ['a', 'b'], taxes: 27.370000000000005, productTaxes: 22.37, deliveryTaxes: 5, cgst: 13.69, sgst: 13.68, missingTaxSplits: 0 }],
     [{ _id: 'Vegetables', value: 30 }], [{ _id: 'Tomato', sales: 20 }], [{ _id: '10', orders: 8 }],
   ];
   const inventoryResult = [{
@@ -153,6 +153,12 @@ test('dashboard statistics count active variants and return separate inventory c
     assert.equal(stats.recentOrders.length, 5);
     assert.equal(recentLimit, 5);
     assert.equal(stats.analytics.averageOrderValue, 692);
+    assert.equal(stats.analytics.taxes, 27.37);
+    assert.equal(stats.analytics.productTaxes, 22.37);
+    assert.equal(stats.analytics.deliveryTaxes, 5);
+    assert.equal(stats.analytics.cgst, 13.69);
+    assert.equal(stats.analytics.sgst, 13.68);
+    assert.equal(stats.analytics.taxBreakdownComplete, true);
     assert.deepEqual(stats.paymentOperations, {
       attention: 3,
       refundPending: 2,
@@ -160,6 +166,17 @@ test('dashboard statistics count active variants and return separate inventory c
       recentExceptions: [{ _id: 'intent-1', status: 'refund_failed' }],
     });
   });
+});
+
+test('dashboard GST retains paid-order eligibility and uses saved invoice CGST/SGST splits', () => {
+  const filter = { ...REVENUE_FILTER, createdAt: { $gte: new Date('2026-10-01'), $lt: new Date('2026-10-11') } };
+  const pipeline = buildDashboardPeriodSummaryPipeline(filter);
+  assert.deepEqual(pipeline[0], { $match: filter });
+  assert.equal(pipeline[1].$lookup.from, 'taxdocuments');
+  assert.deepEqual(pipeline[1].$lookup.pipeline[0], { $match: { kind: 'INVOICE' } });
+  assert.equal(pipeline[2].$group.cgst.$sum.$ifNull[0].$first, '$taxInvoice.content.totals.cgst');
+  assert.equal(pipeline[2].$group.taxes.$sum, '$tax');
+  assert.ok(pipeline[2].$group.missingTaxSplits);
 });
 
 test('dashboard inventory pipeline excludes inactive variants and limits only positive low stock', () => {

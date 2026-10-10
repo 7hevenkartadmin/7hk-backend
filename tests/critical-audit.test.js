@@ -26,6 +26,15 @@ test('ignores unrelated store setting changes', () => {
   }), null);
 });
 
+test('free delivery threshold changes are critical, including zero and legacy defaults', () => {
+  const log = (before, after) => ({ action: 'settings.update', before, after });
+  assert.equal(criticalAuditType(log({ freeDeliveryThreshold: 499 }, { freeDeliveryThreshold: 250 })), 'delivery_charge');
+  assert.equal(criticalAuditType(log({ freeDeliveryThreshold: 250 }, { freeDeliveryThreshold: 0 })), 'delivery_charge');
+  assert.equal(criticalAuditType(log({}, { freeDeliveryThreshold: 499 })), null);
+  assert.equal(criticalAuditType(log({ freeDeliveryThreshold: 0 }, { freeDeliveryThreshold: 0 })), null);
+  assert.equal(criticalAuditMongoFilter('delivery_charge').$or[1].$expr.$or.length, 2);
+});
+
 test('critical audit filters include materialized and legacy events without limiting history', () => {
   const all = criticalAuditMongoFilter('all');
   assert.equal(all.$or[0].criticalType.$in.length, 3);

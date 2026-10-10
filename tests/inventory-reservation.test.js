@@ -455,6 +455,7 @@ test('late capture webhook uses monotonic Payment and Order filters', async () =
 });
 
 test('customer prepaid cancellation restores fulfilment resources and deducts only the captured Razorpay fee', async () => {
+  const { InvoiceCounter } = await import('../src/modules/taxes/tax.model.js');
   const { DeliverySlot } = await import('../src/modules/delivery/deliverySlot.model.js');
   const { cancelOrder } = await import('../src/modules/orders/order.service.js');
   const { Order } = await import('../src/modules/orders/order.model.js');
@@ -508,6 +509,7 @@ test('customer prepaid cancellation restores fulfilment resources and deducts on
   let refundReasonWrites = 0;
 
   await withStubs([
+    { object: InvoiceCounter, method: 'updateOne', implementation: async () => ({}) },
     { object: mongoose, method: 'startSession', implementation: async () => session },
     { object: Order, method: 'findById', implementation: () => queryFor(order) },
     { object: Product, method: 'find', implementation: () => queryReturning([], []) },

@@ -12,13 +12,13 @@ test('calculates grocery cart totals with tax, discount, and delivery fee', () =
 
   const totals = calculateCartTotals({ items, couponDiscount: 40, deliveryFee: 30 });
 
-  assert.deepEqual(totals, {
-    subtotal: 250,
-    tax: 10,
-    discount: 40,
-    deliveryFee: 30,
-    total: 250,
-  });
+  assert.equal(totals.subtotal, 250);
+  assert.equal(totals.productTax, 8);
+  assert.equal(totals.deliveryTaxRate, 5);
+  assert.equal(totals.deliveryTax, 1.43);
+  assert.equal(totals.tax, 9.43);
+  assert.equal(totals.total, 240);
+  assert.equal(totals.cgst + totals.sgst, totals.tax);
 });
 
 test('keeps discount capped to coupon max and subtotal', () => {

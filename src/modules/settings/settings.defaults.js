@@ -96,6 +96,8 @@ export const defaultHomepageBannerSections = {
   middle: { isActive: true, eyebrow: 'More for your home', title: 'Everyday essentials' },
 };
 
+export const defaultFreeDeliveryThreshold = 499;
+
 export const defaultDeliveryZones = [
   { code: 'A', label: 'Zone A', limit: 4, charge: 20, orderCutoff: '20:00', isActive: true },
   { code: 'B', label: 'Zone B', limit: 8, charge: 35, orderCutoff: '19:00', isActive: true },

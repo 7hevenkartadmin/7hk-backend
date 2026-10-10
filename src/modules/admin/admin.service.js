@@ -10,6 +10,22 @@ export const REVENUE_FILTER = {
   status: { $ne: 'cancelled' },
   paymentStatus: { $in: ['paid', 'partially_refunded'] },
 };
+const roundMoney = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+export function buildDashboardPeriodSummaryPipeline(filter) {
+  const split = (field) => ({ $ifNull: [{ $first: `$taxInvoice.content.totals.${field}` }, { $ifNull: [`$${field}`, 0] }] });
+  return [
+    { $match: filter },
+    { $lookup: { from: 'taxdocuments', localField: '_id', foreignField: 'order', pipeline: [{ $match: { kind: 'INVOICE' } }, { $project: { 'content.totals.cgst': 1, 'content.totals.sgst': 1 } }], as: 'taxInvoice' } },
+    { $group: {
+      _id: null, revenue: { $sum: '$total' }, taxes: { $sum: '$tax' }, deliveryTaxes: { $sum: '$deliveryTax' },
+      productTaxes: { $sum: { $ifNull: ['$productTax', { $subtract: [{ $ifNull: ['$tax', 0] }, { $ifNull: ['$deliveryTax', 0] }] }] } },
+      cgst: { $sum: split('cgst') }, sgst: { $sum: split('sgst') },
+      missingTaxSplits: { $sum: { $cond: [{ $and: [{ $gt: [{ $ifNull: ['$tax', 0] }, 0] }, { $eq: [{ $size: '$taxInvoice' }, 0] }, { $or: [{ $eq: [{ $ifNull: ['$cgst', null] }, null] }, { $eq: [{ $ifNull: ['$sgst', null] }, null] }] }] }, 1, 0] } },
+      orders: { $sum: 1 }, customers: { $addToSet: '$customer' },
+    } },
+  ];
+}
 
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -130,7 +146,7 @@ export async function getDashboardStats(period = 'weekly') {
   const today = todayStoreRange();
   const activeFilter = { isActive: true };
   const revenueStart = revenuePeriodStart(period);
-  const periodRevenueFilter = { ...REVENUE_FILTER, createdAt: { $gte: revenueStart } };
+  const periodRevenueFilter = { ...REVENUE_FILTER, createdAt: { $gte: revenueStart, $lt: today.end } };
   const [
     totalOrders, todayOrders, pendingOrders, deliveredOrders, cancelledOrders,
     totalRevenueRows, todayRevenueRows, totalProducts, activeProducts, totalCustomers,
@@ -155,7 +171,7 @@ export async function getDashboardStats(period = 'weekly') {
       { $group: { _id: { $dateToString: { format: revenueDateFormat(period), date: '$createdAt', timezone: 'Asia/Kolkata' } }, revenue: { $sum: '$total' }, orders: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]),
-    Order.aggregate([{ $match: periodRevenueFilter }, { $group: { _id: null, revenue: { $sum: '$total' }, orders: { $sum: 1 }, customers: { $addToSet: '$customer' } } }]),
+    Order.aggregate(buildDashboardPeriodSummaryPipeline(periodRevenueFilter)),
     Order.aggregate([{ $match: periodRevenueFilter }, { $unwind: '$items' }, { $group: { _id: { $ifNull: ['$items.category', 'Other'] }, value: { $sum: '$items.quantity' } } }, { $sort: { value: -1 } }, { $limit: 6 }]),
     Order.aggregate([{ $match: periodRevenueFilter }, { $unwind: '$items' }, { $group: { _id: '$items.name', sales: { $sum: '$items.quantity' } } }, { $sort: { sales: -1 } }, { $limit: 8 }]),
     Order.aggregate([{ $match: periodRevenueFilter }, { $group: { _id: { $dateToString: { format: '%H', date: '$createdAt', timezone: 'Asia/Kolkata' } }, orders: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
@@ -204,6 +220,13 @@ export async function getDashboardStats(period = 'weekly') {
     analytics: {
       orders: periodSummaryRows[0]?.orders || 0,
       revenue: periodSummaryRows[0]?.revenue || 0,
+      taxes: roundMoney(periodSummaryRows[0]?.taxes),
+      deliveryTaxes: roundMoney(periodSummaryRows[0]?.deliveryTaxes),
+      productTaxes: roundMoney(periodSummaryRows[0]?.productTaxes),
+      cgst: roundMoney(periodSummaryRows[0]?.cgst),
+      sgst: roundMoney(periodSummaryRows[0]?.sgst),
+      taxBreakdownComplete: !periodSummaryRows[0]?.missingTaxSplits && Math.round((Number(periodSummaryRows[0]?.cgst || 0) + Number(periodSummaryRows[0]?.sgst || 0)) * 100) === Math.round(Number(periodSummaryRows[0]?.taxes || 0) * 100),
+      taxCollectionBasis: 'Paid and partially refunded non-cancelled orders, before credit-note adjustments',
       customers: periodSummaryRows[0]?.customers?.length || 0,
       averageOrderValue: periodSummaryRows[0]?.orders ? Math.round(periodSummaryRows[0].revenue / periodSummaryRows[0].orders) : 0,
       categories: categoryRows.map((row) => ({ name: row._id || 'Other', value: row.value })),

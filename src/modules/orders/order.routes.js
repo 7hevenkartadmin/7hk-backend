@@ -10,6 +10,7 @@ import { createOrderSchema, customerCancelOrderSchema, quoteOrderSchema, updateS
 import { cancelCustomerOrder, createOrder, getOrderForCustomer, listCustomerOrders, quoteOrder, updateOrderStatus, verifyDeliveryOtp } from './order.service.js';
 import { streamInvoicePdf } from './invoice.service.js';
 import { Order } from './order.model.js';
+import { invoicePresentationForOrder } from '../taxes/tax.service.js';
 
 export const orderRoutes = Router();
 
@@ -54,7 +55,7 @@ orderRoutes.patch('/:id/status', authorize('admin', 'manager', 'support'), valid
 
 orderRoutes.get('/:id/invoice', authorize('customer'), asyncHandler(async (req, res) => {
   const order = await getOrderForCustomer(req.params.id, req.user, { excludePaanCorner: isAndroidRequest(req) });
-  streamInvoicePdf(order, res);
+  streamInvoicePdf(order, res, await invoicePresentationForOrder(order));
 }));
 
 orderRoutes.get('/', authorize('admin', 'manager', 'support'), asyncHandler(async (_req, res) => {

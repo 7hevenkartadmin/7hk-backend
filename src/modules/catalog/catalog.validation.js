@@ -74,7 +74,9 @@ export const productSchema = z.object({
   isFeatured: z.boolean().default(false),
   isActive: z.boolean().default(true),
   popularity: z.number().default(0),
-  taxRate: z.number().min(0).max(100).default(0),
+  hsnCode: z.string().trim().regex(/^(?:\d{4}|\d{6}|\d{8})?$/, 'HSN must contain 4, 6 or 8 digits').optional(),
+  taxRate: z.number().min(0).max(100).optional(),
+  taxMode: z.enum(['subcategory', 'override', 'preserve']).optional(),
 });
 
 export const categorySchema = z.object({
@@ -86,4 +88,6 @@ export const categorySchema = z.object({
   parent: z.string().regex(/^[0-9a-fA-F]{24}$/).nullable().optional(),
   isActive: z.boolean().default(true),
   sortOrder: z.number().default(0),
+  hsnCode: z.string().trim().regex(/^(?:\d{4}|\d{6}|\d{8})?$/, 'HSN must contain 4, 6 or 8 digits').optional(),
+  taxRate: z.number().min(0).max(100).nullable().optional(),
 });

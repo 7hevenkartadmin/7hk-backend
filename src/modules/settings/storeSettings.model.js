@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { defaultFreeDeliveryThreshold } from './settings.defaults.js';
 
 const bannerSchema = new mongoose.Schema({
   placement: { type: String, enum: ['hero', 'middle'], default: 'hero', index: true },
@@ -85,6 +86,10 @@ const storeSettingsSchema = new mongoose.Schema({
     middle: { type: bannerSectionSchema, default: () => ({ isActive: true, eyebrow: 'More for your home', title: 'Everyday essentials' }) },
   },
   deliveryZones: [deliveryZoneSchema],
+  freeDeliveryThreshold: {
+    type: Number, min: 0, max: 100000, default: defaultFreeDeliveryThreshold,
+    validate: { validator: (value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-7, message: 'Free delivery cart value must have at most two decimal places' },
+  },
   codSettings: codSettingsSchema,
   orderingSchedule: orderingScheduleSchema,
 }, { timestamps: true });

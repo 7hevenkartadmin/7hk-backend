@@ -59,7 +59,7 @@ const envSchema = z.object({
   LOW_STOCK_THRESHOLD: z.coerce.number().int().positive().default(20),
   STORE_LATITUDE: z.coerce.number().default(26.713052497465416),
   STORE_LONGITUDE: z.coerce.number().default(85.68640273918543),
-  STORE_TRADE_NAME: z.string().trim().min(2).default('7hevenkart'),
+  STORE_TRADE_NAME: z.string().trim().min(2).default('7Hevenkart'),
   STORE_LEGAL_NAME: z.string().trim().min(2).default('Sarswati Enterprises'),
   STORE_SUPPORT_EMAIL: z.string().email().default('support@7hevenkart.com'),
   STORE_GSTIN: z.string().trim().toUpperCase().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/).default('10IOFPK5192L1ZO'),

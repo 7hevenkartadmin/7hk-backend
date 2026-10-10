@@ -1,5 +1,6 @@
 import { StoreSettings } from './storeSettings.model.js';
-import { defaultCodSettings, defaultDeliveryZones, defaultHomepageBanners, defaultHomepageBannerSections, defaultOrderingSchedule } from './settings.defaults.js';
+import { defaultCodSettings, defaultDeliveryZones, defaultFreeDeliveryThreshold, defaultHomepageBanners, defaultHomepageBannerSections, defaultOrderingSchedule } from './settings.defaults.js';
+import { defaultDeliveryFee } from '../orders/pricing.service.js';
 
 function normalizeBannerSections(sections = {}) {
   const source = typeof sections?.toObject === 'function' ? sections.toObject() : sections || {};
@@ -32,6 +33,7 @@ function normalizeSettings(settings) {
       .map((banner) => ({ placement: 'hero', displayStyle: 'content', theme: 'dark', textPosition: 'left', imagePosition: 'center', overlayOpacity: 55, ...banner }))
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)),
     homepageBannerSections: normalizeBannerSections(settings.homepageBannerSections),
+    freeDeliveryThreshold: settings.freeDeliveryThreshold ?? defaultFreeDeliveryThreshold,
     deliveryZones: (settings.deliveryZones?.length ? settings.deliveryZones : defaultDeliveryZones)
       .map((zone) => (typeof zone.toObject === 'function' ? zone.toObject() : zone))
       .map((zone) => ({ ...zone, orderCutoff: zone.orderCutoff || (zone.code === 'A' ? '20:00' : '19:00') }))
@@ -47,7 +49,7 @@ function normalizeSettings(settings) {
 export async function getStoreSettings() {
   const settings = await StoreSettings.findOneAndUpdate(
     { key: 'storefront' },
-    { $setOnInsert: { homepageBanners: defaultHomepageBanners, homepageBannerSections: defaultHomepageBannerSections, deliveryZones: defaultDeliveryZones, codSettings: defaultCodSettings, orderingSchedule: defaultOrderingSchedule } },
+    { $setOnInsert: { homepageBanners: defaultHomepageBanners, homepageBannerSections: defaultHomepageBannerSections, deliveryZones: defaultDeliveryZones, freeDeliveryThreshold: defaultFreeDeliveryThreshold, codSettings: defaultCodSettings, orderingSchedule: defaultOrderingSchedule } },
     { upsert: true, new: true },
   );
   return normalizeSettings(settings);
@@ -58,6 +60,7 @@ export async function updateStoreSettings(payload) {
   if (payload.homepageBanners) update.homepageBanners = payload.homepageBanners;
   if (payload.homepageBannerSections) update.homepageBannerSections = payload.homepageBannerSections;
   if (payload.deliveryZones) update.deliveryZones = payload.deliveryZones.sort((a, b) => a.limit - b.limit);
+  if (payload.freeDeliveryThreshold !== undefined) update.freeDeliveryThreshold = payload.freeDeliveryThreshold;
   if (payload.codSettings) update.codSettings = payload.codSettings;
   if (payload.orderingSchedule) update.orderingSchedule = payload.orderingSchedule;
   const settings = await StoreSettings.findOneAndUpdate(
@@ -76,6 +79,16 @@ export async function getCodSettings() {
 export async function deliveryFeeForDistance(distanceKm, fallbackFee = 30) {
   if (!Number.isFinite(distanceKm)) return fallbackFee;
   const { deliveryZones } = await getStoreSettings();
+  const zone = deliveryZones.find((item) => item.isActive !== false && distanceKm <= item.limit);
+  return zone ? zone.charge : fallbackFee;
+}
+
+// Eligibility uses the GST-inclusive product subtotal before coupon discounts.
+// Service-area and ordering restrictions are enforced separately at checkout.
+export async function deliveryFeeForCart(subtotal, distanceKm) {
+  const { deliveryZones, freeDeliveryThreshold } = await getStoreSettings();
+  const fallbackFee = defaultDeliveryFee(subtotal, freeDeliveryThreshold);
+  if (fallbackFee === 0 || !Number.isFinite(distanceKm)) return fallbackFee;
   const zone = deliveryZones.find((item) => item.isActive !== false && distanceKm <= item.limit);
   return zone ? zone.charge : fallbackFee;
 }

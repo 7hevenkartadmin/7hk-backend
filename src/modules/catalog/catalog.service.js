@@ -1,4 +1,5 @@
 import slugify from 'slugify';
+import { normalizeCategoryTax, productNeedsTaxDefaults, resolveProductTax } from './catalog.tax.js';
 import { Product } from './product.model.js';
 import { Category } from './category.model.js';
 import { getPagination, paged } from '../../shared/utils/pagination.js';
@@ -14,6 +15,15 @@ import {
 } from './paanCorner.visibility.js';
 
 const SKU_WRITE_ATTEMPTS = 5;
+
+async function resolveProductTaxUpdate(payload, existing = null) {
+  let subcategory = null;
+  if (productNeedsTaxDefaults(payload, existing)) {
+    const subcategoryId = Object.hasOwn(payload, 'subcategoryRef') ? payload.subcategoryRef : existing?.subcategoryRef;
+    if (subcategoryId) subcategory = await Category.findById(subcategoryId);
+  }
+  return resolveProductTax(payload, existing, subcategory);
+}
 
 const sortMap = {
   popularity: { popularity: -1, createdAt: -1, _id: 1 },
@@ -137,7 +147,7 @@ export function toPublicProduct(product) {
     : item.variants?.length
       ? 0
       : maxOrderableQuantity(item.stock, item.reservedStock, { isActive: item.isActive !== false });
-  item.isAvailable = item.isActive !== false && summary.availableStock > 0;
+  item.isAvailable = item.taxStatus !== 'review' && item.isActive !== false && summary.availableStock > 0;
   item.maxOrderableQuantity = defaultMaximum;
   item.defaultVariantId = defaultVariant?._id;
   item.defaultVariantAvailable = defaultMaximum > 0;
@@ -155,6 +165,14 @@ export function toPublicProduct(product) {
     delete publicVariant.reservedStock;
     return publicVariant;
   }) : [];
+  if (item.taxStatus === 'review') {
+    item.maxOrderableQuantity = 0;
+    item.defaultVariantAvailable = false;
+    item.defaultVariantMaxOrderableQuantity = 0;
+    item.variants = item.variants.map((variant) => ({ ...variant, isAvailable: false, maxOrderableQuantity: 0 }));
+  }
+  delete item.taxSource;
+  delete item.taxReviewReason;
   return item;
 }
 
@@ -376,7 +394,7 @@ export async function getProductById(idOrSlug, options = {}) {
 
 export async function createProduct(payload) {
   const slug = slugify(payload.name, { lower: true, strict: true });
-  const normalized = await resolveCategoryHierarchy(payload);
+  const normalized = await resolveProductTaxUpdate(await resolveCategoryHierarchy(payload));
   for (let attempt = 0; attempt < SKU_WRITE_ATTEMPTS; attempt += 1) {
     const productPayload = prepareNewProductSkus(normalized);
     try {
@@ -394,7 +412,7 @@ export async function updateProduct(id, payload) {
   for (let attempt = 0; attempt < SKU_WRITE_ATTEMPTS; attempt += 1) {
     const product = await Product.findById(id);
     if (!product) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
-    const resolved = await resolveCategoryHierarchy(payload, product);
+    const resolved = await resolveProductTaxUpdate(await resolveCategoryHierarchy(payload, product), product);
     const update = prepareProductUpdateSkus(resolved, product.variants);
     if (update.name) update.slug = slugify(update.name, { lower: true, strict: true });
 
@@ -445,7 +463,7 @@ export async function createCategory(payload) {
   if (payload.isActive !== false && parent?.isActive === false) {
     throw new AppError('Activate the parent category before adding an active subcategory', 409, 'INACTIVE_PARENT_CATEGORY');
   }
-  const category = await Category.create(payload);
+  const category = await Category.create(normalizeCategoryTax(payload));
   return category.populate('parent', 'name slug');
 }
 
@@ -461,7 +479,7 @@ export async function updateCategory(id, payload) {
     }
   }
 
-  const category = await Category.findByIdAndUpdate(id, payload, { new: true, runValidators: true });
+  const category = await Category.findByIdAndUpdate(id, normalizeCategoryTax(payload, existing), { new: true, runValidators: true });
   if (!category) throw new AppError('Category not found', 404, 'CATEGORY_NOT_FOUND');
   if (payload.isActive === false) {
     const childIds = await Category.find({ parent: id }).distinct('_id');

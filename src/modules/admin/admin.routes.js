@@ -6,6 +6,8 @@ import { validate } from '../../shared/validation/validate.js';
 import { authorize, requireAuth } from '../auth/auth.middleware.js';
 import { Product } from '../catalog/product.model.js';
 import { Order } from '../orders/order.model.js';
+import { invoiceLineItems, invoiceTotals, streamInvoicePdf } from '../orders/invoice.service.js';
+import { storeBusiness } from '../../config/store.js';
 import { User } from '../users/user.model.js';
 import { AuditLog } from '../audit/audit.model.js';
 import { env } from '../../config/env.js';
@@ -14,6 +16,7 @@ import { auditLogsQuerySchema, adminOrdersQuerySchema, dashboardStatsQuerySchema
 import { buildInventoryDashboardPipeline, getDashboardStats, listAdminOrders } from './admin.service.js';
 import { parseStoreDate, todayStoreRange } from '../../shared/utils/storeDate.js';
 import { criticalAuditMongoFilter, criticalAuditType } from '../audit/criticalAudit.js';
+import { invoicePresentationForOrder } from '../taxes/tax.service.js';
 
 export const adminRoutes = Router();
 
@@ -141,5 +144,8 @@ adminRoutes.get('/orders/:id/invoice', asyncHandler(async (req, res) => {
   if (mongoose.Types.ObjectId.isValid(req.params.id)) filters.push({ _id: req.params.id });
   const order = await Order.findOne({ $or: filters });
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
-  ok(res, { invoice: order.invoice, order }, 'Admin invoice loaded');
+  const presentation = await invoicePresentationForOrder(order);
+  if (req.query.format === 'pdf') return streamInvoicePdf(order, res, presentation);
+  const lines = presentation?.lines || invoiceLineItems(order);
+  ok(res, presentation || { invoice: order.invoice, seller: storeBusiness, order, lines, totals: invoiceTotals(order, lines) }, 'Admin invoice loaded');
 }));

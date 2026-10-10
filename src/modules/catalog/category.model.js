@@ -10,6 +10,8 @@ const categorySchema = new mongoose.Schema({
   parent: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null, index: true },
   isActive: { type: Boolean, default: true, index: true },
   sortOrder: { type: Number, default: 0 },
+  hsnCode: { type: String, trim: true, default: '', validate: { validator: (value) => !value || /^(?:\d{4}|\d{6}|\d{8})$/.test(value), message: 'HSN must contain 4, 6 or 8 digits' } },
+  taxRate: { type: Number, min: 0, max: 100, default: null },
 }, { timestamps: true });
 
 categorySchema.index({ parent: 1, sortOrder: 1, name: 1 });

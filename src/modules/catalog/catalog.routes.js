@@ -54,7 +54,6 @@ catalogRoutes.get('/admin/products', requireAuth, authorize('admin', 'manager'),
 }));
 
 catalogRoutes.use(requireAuth, authorize('admin', 'manager'));
-
 catalogRoutes.post('/uploads/images', catalogImageUpload, asyncHandler(async (req, res) => {
   if (!req.file) throw new AppError('Image file is required', 422, 'IMAGE_REQUIRED');
   const image = await uploadCatalogImage(req.file, { kind: req.body.kind || 'product', actorId: req.user._id });

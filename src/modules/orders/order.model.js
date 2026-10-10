@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { AppError } from '../../shared/utils/AppError.js';
 
 export const ORDER_STATUSES = ['placed', 'confirmed', 'packed', 'out_for_delivery', 'delivered', 'cancelled'];
 
@@ -14,7 +15,8 @@ const orderItemSchema = new mongoose.Schema({
   quantity: { type: Number, min: 1, required: true },
   price: { type: Number, min: 0, required: true },
   mrp: { type: Number, min: 0, required: true },
-  taxRate: { type: Number, min: 0, default: 0 },
+  hsnCode: { type: String, default: '' },
+  taxRate: { type: Number, min: 0, max: 100, default: 0 },
 }, { _id: false });
 
 const orderSchema = new mongoose.Schema({
@@ -51,6 +53,26 @@ const orderSchema = new mongoose.Schema({
   discount: { type: Number, min: 0, default: 0 },
   deliveryFee: { type: Number, min: 0, default: 0 },
   tax: { type: Number, min: 0, default: 0 },
+  pricingVersion: Number,
+  gstLines: [{
+    _id: false,
+    hsnCode: String,
+    taxRate: { type: Number, min: 0, max: 100 },
+    couponDiscount: { type: Number, min: 0 },
+    taxableValue: { type: Number, min: 0 },
+    deliveryTaxableValue: { type: Number, min: 0 },
+    productTax: { type: Number, min: 0 },
+    deliveryTax: { type: Number, min: 0 },
+    taxAmount: { type: Number, min: 0 },
+    cgstAmount: { type: Number, min: 0 },
+    sgstAmount: { type: Number, min: 0 },
+  }],
+  productTax: { type: Number, min: 0 },
+  deliveryTax: { type: Number, min: 0 },
+  deliveryTaxRate: { type: Number, min: 0, max: 100 },
+  deliveryTaxableValue: { type: Number, min: 0 },
+  cgst: { type: Number, min: 0 },
+  sgst: { type: Number, min: 0 },
   total: { type: Number, min: 0, required: true },
   paymentMethod: { type: String, enum: ['razorpay', 'cod'], required: true },
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refund_pending', 'refund_failed', 'partially_refunded', 'refunded', 'cod_refund_approved'], default: 'pending' },
@@ -109,6 +131,9 @@ const orderSchema = new mongoose.Schema({
     number: String,
     issuedAt: Date,
     url: String,
+    documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'TaxDocument' },
+    checksum: String,
+    documentType: String,
   },
   deliveryAgent: {
     name: String,
@@ -127,5 +152,19 @@ orderSchema.index(
 orderSchema.index({ 'customerSnapshot.name': 1 });
 orderSchema.index({ 'customerSnapshot.phone': 1 });
 orderSchema.index({ 'address.phone': 1 });
+
+const protectedInvoicePaths = ['items', 'customerSnapshot', 'address', 'subtotal', 'discount', 'deliveryFee', 'tax', 'pricingVersion', 'gstLines', 'productTax', 'deliveryTax', 'deliveryTaxRate', 'deliveryTaxableValue', 'cgst', 'sgst', 'total', 'invoice'];
+orderSchema.post('init', function () { this.$locals.taxSealed = Boolean(this.invoice?.number); });
+orderSchema.post('save', function () { this.$locals.taxSealed = Boolean(this.invoice?.number); });
+orderSchema.pre('save', function () {
+  if (this.$locals.taxSealed && protectedInvoicePaths.some((path) => this.isModified(path))) throw new AppError('Issued invoice amounts and particulars are immutable; use a linked tax correction.', 409, 'INVOICE_IMMUTABLE');
+});
+for (const operation of ['updateOne', 'updateMany', 'findOneAndUpdate', 'replaceOne', 'findOneAndReplace']) {
+  orderSchema.pre(operation, function () {
+    const update = this.getUpdate() || {};
+    const paths = Array.isArray(update) || ['replaceOne', 'findOneAndReplace'].includes(operation) ? protectedInvoicePaths : Object.entries(update).flatMap(([operator, values]) => operator === '$rename' ? [...Object.keys(values || {}), ...Object.values(values || {})] : operator.startsWith('$') ? Object.keys(values || {}) : [operator]);
+    if (paths.some((path) => protectedInvoicePaths.some((protectedPath) => path === protectedPath || path.startsWith(`${protectedPath}.`)))) throw new AppError('Issued invoice data cannot be updated through an order query.', 409, 'INVOICE_IMMUTABLE');
+  });
+}
 
 export const Order = mongoose.model('Order', orderSchema);

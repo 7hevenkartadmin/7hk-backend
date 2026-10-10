@@ -9,8 +9,8 @@ import { claimCoupon, releaseCouponReservation, validateCoupon } from '../coupon
 import { DeliverySlot } from '../delivery/deliverySlot.model.js';
 import { releaseSlot, reserveSlot } from '../delivery/delivery.service.js';
 import { releaseReservedInventory, reserveInventory } from '../inventory/inventory.service.js';
-import { calculateCartTotals, defaultDeliveryFee } from '../orders/pricing.service.js';
-import { deliveryFeeForDistance } from '../settings/settings.service.js';
+import { calculateCartTotals } from '../orders/pricing.service.js';
+import { deliveryFeeForCart } from '../settings/settings.service.js';
 import { assertStoreAcceptingOrders } from '../settings/storeAvailability.service.js';
 import { PaymentIntent } from './paymentIntent.model.js';
 import { findOwnedAddress } from '../addresses/address.service.js';
@@ -188,6 +188,7 @@ async function hydrateCheckoutItems(inputItems, { excludePaanCorner = false } = 
   return inputItems.map((item) => {
     const product = byId.get(item.productId);
     if (!product) throw new AppError('Product not found in cart', 404, 'PRODUCT_NOT_FOUND');
+    if (product.taxStatus === 'review') throw new AppError(`${product.name} is awaiting tax classification. Please remove it or contact support.`, 409, 'TAX_CLASSIFICATION_PENDING');
     const variant = product.variants?.length
       ? (item.variantId ? product.variants.id(item.variantId) : product.variants.find((entry) => entry.isDefault && entry.isActive))
       : null;
@@ -201,7 +202,7 @@ async function hydrateCheckoutItems(inputItems, { excludePaanCorner = false } = 
     }
     return {
       product, variant, quantity: item.quantity, price: variant?.price ?? product.price,
-      mrp: variant?.mrp ?? product.mrp, taxRate: product.taxRate, name: product.name,
+      mrp: variant?.mrp ?? product.mrp, taxRate: product.taxRate, hsnCode: product.hsnCode, name: product.name,
       variantTitle: variant?.title || '',
       sku: variant?.sku ?? product.sku, unit: variant?.unit ?? product.unit,
       image: variant?.images?.[0] || product.image,
@@ -394,7 +395,7 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
   if (!address) throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
   const deliveryAddress = paymentDeliveryAddressSnapshot(address);
   await assertStoreAcceptingOrders({ distanceKm: address.distanceFromStoreKm });
-  const deliveryFee = subtotalOnly >= 499 ? 0 : await deliveryFeeForDistance(address.distanceFromStoreKm, defaultDeliveryFee(subtotalOnly));
+  const deliveryFee = await deliveryFeeForCart(subtotalOnly, address.distanceFromStoreKm);
   const totals = calculateCartTotals({ items, couponDiscount: discount, deliveryFee });
   const amountPaise = assertRazorpayOrderAmount(Math.round(totals.total * 100));
   const cartHash = createCartHash(payload.items, payload.couponCode, totals.total, payload.addressId, payload.slotId);
@@ -402,7 +403,7 @@ export async function createRazorpayCheckoutSession(payload, customer, idempoten
   const checkoutSnapshot = {
     items: items.map((item) => ({
       productId: String(item.product._id), variantId: item.variant?._id ? String(item.variant._id) : '',
-      quantity: item.quantity, price: item.price, mrp: item.mrp, taxRate: item.taxRate,
+      quantity: item.quantity, price: item.price, mrp: item.mrp, taxRate: item.taxRate, hsnCode: item.hsnCode,
       name: item.name, variantTitle: item.variantTitle, sku: item.sku, unit: item.unit, image: item.image, category: item.product.category,
       categorySlug: item.product.categoryRef?.slug,
     })),
