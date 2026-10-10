@@ -43,6 +43,7 @@ const envSchema = z.object({
   OTP_HMAC_SECRET: z.string().min(32).optional(),
   OTP_QUEUE_NAME: z.string().min(1).default('otp-notifications'),
   OTP_WORKER_ENABLED: strictEnvironmentBoolean(true),
+  DEMO_LOGIN_ENABLED: strictEnvironmentBoolean(true),
   WHATSAPP_PROVIDER: whatsappProviderSchema,
   META_WHATSAPP_ACCESS_TOKEN: z.string().optional().default(''),
   META_WHATSAPP_PHONE_NUMBER_ID: z.string().optional().default(''),

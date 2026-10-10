@@ -11,6 +11,7 @@ import { cancelCustomerOrder, createOrder, getOrderForCustomer, listCustomerOrde
 import { streamInvoicePdf } from './invoice.service.js';
 import { Order } from './order.model.js';
 import { invoicePresentationForOrder } from '../taxes/tax.service.js';
+import { requireNonDemoCustomer } from '../auth/demo-login.js';
 
 export const orderRoutes = Router();
 
@@ -20,11 +21,11 @@ orderRoutes.post('/quote', authorize('customer'), validate(quoteOrderSchema), as
   ok(res, await quoteOrder(req.user, req.body, { excludePaanCorner: isAndroidRequest(req) }), 'Order quote calculated');
 }));
 
-orderRoutes.post('/', authorize('customer'), validate(createOrderSchema), asyncHandler(async (req, res) => {
+orderRoutes.post('/', authorize('customer'), requireNonDemoCustomer, validate(createOrderSchema), asyncHandler(async (req, res) => {
   created(res, await createOrder(req.user, req.body, { excludePaanCorner: isAndroidRequest(req) }), 'Order placed');
 }));
 
-orderRoutes.post('/:id/cancel', authorize('customer'), customerOrderActionRateLimiter, validate(customerCancelOrderSchema), asyncHandler(async (req, res) => {
+orderRoutes.post('/:id/cancel', authorize('customer'), requireNonDemoCustomer, customerOrderActionRateLimiter, validate(customerCancelOrderSchema), asyncHandler(async (req, res) => {
   const order = await cancelCustomerOrder(req.params.id, req.body.reason, req.user, { excludePaanCorner: isAndroidRequest(req) });
   ok(res, { order }, 'Order cancelled');
 }));

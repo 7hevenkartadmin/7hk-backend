@@ -6,6 +6,7 @@ import { createOtpNotificationWorker } from './otp-notification.worker.js';
 import { OtpTokenService } from './otp-token.service.js';
 import { createLoginOtpDeliveryProvider } from './providers/index.js';
 import { SecureOtpService } from './secure-otp.service.js';
+import { demoOtpFor, demoOtpIdentity } from './demo-login.js';
 
 let sevenHeavenOtpService;
 
@@ -31,6 +32,7 @@ export function getSevenHeavenOtpService() {
         connection,
       }),
       tokenService: new OtpTokenService(env.OTP_HMAC_SECRET),
+      fixedOtpFor: demoOtpFor,
       ttlSeconds: 300,
       maxAttempts: 5,
       requestLimit: 5,
@@ -42,9 +44,9 @@ export function getSevenHeavenOtpService() {
   return sevenHeavenOtpService;
 }
 
-export function buildLoginOtpPayload(phone) {
+export function buildLoginOtpPayload(phone, demo = false) {
   return {
-    userId: phone,
+    userId: demoOtpIdentity(phone, demo),
     purpose: OTP_PURPOSE.LOGIN,
     channel: OTP_CHANNEL.WHATSAPP,
     recipient: phone,

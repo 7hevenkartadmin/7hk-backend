@@ -18,6 +18,7 @@ import { recordRestrictedProductConsent } from '../compliance/restrictedProductC
 import { restrictedProductConsentSchema } from '../compliance/restrictedProductConsent.validation.js';
 import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { DEMO_LOGIN_PHONE, requireNonDemoCustomer } from '../auth/demo-login.js';
 
 export const userRoutes = Router();
 
@@ -26,6 +27,7 @@ userRoutes.use(requireAuth, authorize('customer'));
 async function profileWithAddresses(user) {
   const profile = user.toObject();
   profile.id = user.id;
+  if (user.demoAccount) profile.phone = DEMO_LOGIN_PHONE;
   profile.addresses = await listAddresses(user._id);
   return profile;
 }
@@ -34,13 +36,13 @@ userRoutes.get('/me', asyncHandler(async (req, res) => {
   ok(res, { user: await profileWithAddresses(req.user) }, 'Profile loaded');
 }));
 
-userRoutes.patch('/me', validate(updateProfileSchema), asyncHandler(async (req, res) => {
+userRoutes.patch('/me', requireNonDemoCustomer, validate(updateProfileSchema), asyncHandler(async (req, res) => {
   Object.assign(req.user, req.body);
   await req.user.save();
   ok(res, { user: await profileWithAddresses(req.user) }, 'Profile updated');
 }));
 
-userRoutes.post('/me/restricted-product-consents', restrictedProductConsentRateLimiter, validate(restrictedProductConsentSchema), asyncHandler(async (req, res) => {
+userRoutes.post('/me/restricted-product-consents', requireNonDemoCustomer, restrictedProductConsentRateLimiter, validate(restrictedProductConsentSchema), asyncHandler(async (req, res) => {
   if (isAndroidRequest(req)) throw new AppError('Resource not found', 404, 'RESOURCE_NOT_FOUND');
   ok(res, { consent: await recordRestrictedProductConsent(req.user, req.body) }, 'Restricted-product acknowledgement recorded', 201);
 }));
@@ -50,18 +52,18 @@ userRoutes.post('/me/addresses/validate', validate(validateAddressLocationSchema
   ok(res, { ok: true, distanceKm: delivery.distanceFromStoreKm, radiusKm: delivery.radiusKm }, 'Location is deliverable');
 }));
 
-userRoutes.post('/me/addresses', validate(addressSchema), asyncHandler(async (req, res) => {
+userRoutes.post('/me/addresses', requireNonDemoCustomer, validate(addressSchema), asyncHandler(async (req, res) => {
   ok(res, await createAddress(req.user, req.body), 'Address added', 201);
 }));
 
-userRoutes.patch('/me/addresses/:addressId', validate(addressSchema), asyncHandler(async (req, res) => {
+userRoutes.patch('/me/addresses/:addressId', requireNonDemoCustomer, validate(addressSchema), asyncHandler(async (req, res) => {
   ok(res, await updateAddress(req.user, req.params.addressId, req.body), 'Address updated');
 }));
 
-userRoutes.patch('/me/addresses/:addressId/default', asyncHandler(async (req, res) => {
+userRoutes.patch('/me/addresses/:addressId/default', requireNonDemoCustomer, asyncHandler(async (req, res) => {
   ok(res, await setDefaultAddress(req.user, req.params.addressId), 'Default address updated');
 }));
 
-userRoutes.delete('/me/addresses/:addressId', asyncHandler(async (req, res) => {
+userRoutes.delete('/me/addresses/:addressId', requireNonDemoCustomer, asyncHandler(async (req, res) => {
   ok(res, await deleteAddress(req.user, req.params.addressId), 'Address removed');
 }));

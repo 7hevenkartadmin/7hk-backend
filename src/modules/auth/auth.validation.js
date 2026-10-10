@@ -23,10 +23,12 @@ export const refreshSchema = z.object({}).strict();
 
 export const requestOtpSchema = z.object({
   phone,
+  demo: z.boolean().optional(),
 });
 
 export const verifyOtpSchema = z.object({
   phone,
   otp,
   name: z.string().min(2).max(80).optional(),
+  demo: z.boolean().optional(),
 });

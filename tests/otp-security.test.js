@@ -19,7 +19,7 @@ function createPayload(phone) {
   };
 }
 
-async function createRedisHarness(t) {
+async function createRedisHarness(t, { fixedOtpFor } = {}) {
   const redisClient = new Redis(env.REDIS_URL, {
     connectTimeout: 1000,
     retryStrategy: () => null,
@@ -54,6 +54,7 @@ async function createRedisHarness(t) {
     resendCooldownSeconds: 30,
     correlationTtlSeconds: 120,
     diagnosticSink(event) { diagnosticEvents.push(event); },
+    fixedOtpFor,
   });
 
   t.after(async () => {
@@ -84,6 +85,20 @@ test('OTP hashes are keyed, identity-bound, and deterministic', () => {
   assert.notEqual(tokenService.hash(otp, identity), tokenService.hash(otp, 'different-identity'));
   assert.notEqual(tokenService.hash(otp, identity), crypto.createHash('sha256').update(otp).digest('hex'));
   assert.doesNotMatch(identity, /9876543210/);
+});
+
+test('fixed demo code still requires a live challenge and is never queued for delivery', async (t) => {
+  const harness = await createRedisHarness(t, { fixedOtpFor: (payload) => payload.purpose === 'LOGIN' ? '123456' : null });
+  if (!harness) return;
+
+  const payload = createPayload(`+91${String(Date.now()).slice(-10)}`);
+  await assert.rejects(harness.service.verifyOtp({ ...payload, otp: '123456' }), { code: 'OTP_INVALID' });
+  await harness.service.requestOtp(payload);
+  assert.equal(harness.jobs.length, 0);
+  await assert.rejects(harness.service.verifyOtp({ ...payload, otp: '654321' }), { code: 'OTP_INVALID' });
+  const result = await harness.service.verifyOtp({ ...payload, otp: '123456' });
+  assert.equal(result.status, 'OTP_VERIFIED');
+  assert.ok(result.proofId);
 });
 
 test('concurrent correct submissions resolve to one bounded verified proof', async (t) => {

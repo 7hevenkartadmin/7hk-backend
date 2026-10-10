@@ -79,6 +79,14 @@ test('environment booleans default only when absent and preserve exact true and 
   }
 });
 
+test('demo login is available by default and supports an explicit switch', () => {
+  assert.equal(parseEnvironment(base).DEMO_LOGIN_ENABLED, true);
+  assert.equal(parseEnvironment({ ...base, NODE_ENV: 'development' }).DEMO_LOGIN_ENABLED, true);
+  assert.equal(parseEnvironment({ ...base, NODE_ENV: 'development', DEMO_LOGIN_ENABLED: 'false' }).DEMO_LOGIN_ENABLED, false);
+  assert.equal(parseEnvironment({ ...base, DEMO_LOGIN_ENABLED: 'true' }).DEMO_LOGIN_ENABLED, true);
+  assert.throws(() => parseEnvironment({ ...base, DEMO_LOGIN_ENABLED: 'yes' }));
+});
+
 test('only implemented OTP delivery providers are accepted', () => {
   assert.equal(parseEnvironment({ ...base, WHATSAPP_PROVIDER: 'disabled' }).WHATSAPP_PROVIDER, 'disabled');
   assert.equal(parseEnvironment({ ...base, WHATSAPP_PROVIDER: 'console' }).WHATSAPP_PROVIDER, 'console');

@@ -9,16 +9,17 @@ const userSchema = new mongoose.Schema({
   phone: {
     type: String,
     trim: true,
-    required: [function phoneRequiredForCustomer() { return this.role === 'customer'; }, 'Phone number is required for customers'],
+    required: [function phoneRequiredForCustomer() { return this.role === 'customer' && !this.demoAccount; }, 'Phone number is required for customers'],
     validate: {
       validator(value) {
-        return this.role !== 'customer' || INDIAN_PHONE_PATTERN.test(value || '');
+        return this.role !== 'customer' || this.demoAccount || INDIAN_PHONE_PATTERN.test(value || '');
       },
       message: 'Enter a valid Indian phone number',
     },
   },
   passwordHash: { type: String, required: true, select: false },
   role: { type: String, enum: ['customer', 'owner', 'admin', 'manager', 'support'], default: 'customer', index: true },
+  demoAccount: { type: Boolean, default: false, immutable: true },
   status: { type: String, enum: ['invited', 'active', 'blocked', 'revoked'], default: 'active' },
   staffSeat: { type: String, enum: ['PRIMARY_OWNER', 'PRIMARY_ADMIN'] },
   assignmentExpiresAt: Date,

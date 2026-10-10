@@ -578,3 +578,11 @@ test('transaction model completes both new and existing active customer accounts
     assert.equal(state.user.refreshTokenHash, hashToken(result.tokens.refreshToken));
   }
 });
+
+test('customer OTP cannot create a session for an administrator account', async () => {
+  const harness = createLoginCompletionHarness({ existingUser: true });
+  harness.transitionUser({ role: 'admin' });
+  await assert.rejects(harness.complete(), { code: 'CUSTOMER_OTP_ONLY' });
+  assert.equal(harness.snapshot().completionWrites, 0);
+  assert.equal(harness.snapshot().refreshWrites, 0);
+});

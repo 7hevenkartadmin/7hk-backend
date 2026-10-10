@@ -10,6 +10,7 @@ export function createLoginCompletionHarness({
   blocked = false,
   failOnceAt = [],
   now = Date.now(),
+  demoEnabled = false,
 } = {}) {
   const failures = new Set(Array.isArray(failOnceAt) ? failOnceAt : [failOnceAt]);
   const failureCounts = new Map();
@@ -45,6 +46,7 @@ export function createLoginCompletionHarness({
   }
 
   const dependencies = {
+    demoEnabled,
     async findCompletion(proofDigest, session) {
       const store = storeFor(session);
       if (!store.completion || store.completion.proofDigest !== proofDigest) return null;
@@ -131,9 +133,10 @@ export function createLoginCompletionHarness({
       normalizedPhone = '+919876543210',
       name = 'Synthetic Customer',
       proofId = '00000000-0000-4000-8000-000000000001',
+      demo = false,
     } = {}) {
       return completeVerifiedLoginWithDependencies(
-        { normalizedPhone, name, proofId },
+        { normalizedPhone, name, proofId, demo },
         dependencies,
       );
     },

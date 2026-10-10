@@ -61,8 +61,8 @@ authRoutes.post('/register', authRateLimiter, validate(registerSchema), asyncHan
 authRoutes.post('/otp/resend', otpRateLimiter, validate(requestOtpSchema), asyncHandler(async (req, res) => {
   ok(
     res,
-    await resendOtp(req.body.phone, crypto.randomUUID()),
-    'A replacement OTP is being sent through WhatsApp.',
+    await resendOtp(req.body.phone, crypto.randomUUID(), req.body.demo),
+    req.body.demo ? 'Demo code is ready.' : 'A replacement OTP is being sent through WhatsApp.',
   );
 }));
 
@@ -94,8 +94,8 @@ authRoutes.post('/refresh/owner', authRateLimiter, validate(refreshSchema), asyn
 authRoutes.post('/otp/request', otpRateLimiter, validate(requestOtpSchema), asyncHandler(async (req, res) => {
   ok(
     res,
-    await requestOtp(req.body.phone, crypto.randomUUID()),
-    'If this number can receive WhatsApp messages, an OTP will arrive shortly.',
+    await requestOtp(req.body.phone, crypto.randomUUID(), req.body.demo),
+    req.body.demo ? 'Demo code is ready.' : 'If this number can receive WhatsApp messages, an OTP will arrive shortly.',
   );
 }));
 

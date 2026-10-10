@@ -137,7 +137,7 @@ const PUBLIC_PROVIDER_STATUSES = new Set(['SENT', 'DELIVERED', 'READ', 'FAILED']
 export class SecureOtpService {
   constructor({ redisClient, notificationQueue, tokenService, ttlSeconds = 300, maxAttempts = 5,
     requestLimit = 5, requestWindowSeconds = 60, resendCooldownSeconds = 30,
-    correlationTtlSeconds = 24 * 60 * 60, diagnosticSink }) {
+    correlationTtlSeconds = 24 * 60 * 60, diagnosticSink, fixedOtpFor = () => null }) {
     this.redisClient = redisClient;
     this.notificationQueue = notificationQueue;
     this.tokenService = tokenService;
@@ -148,12 +148,14 @@ export class SecureOtpService {
     this.resendCooldownSeconds = resendCooldownSeconds;
     this.correlationTtlSeconds = Math.max(correlationTtlSeconds, ttlSeconds * 2);
     this.diagnosticSink = diagnosticSink;
+    this.fixedOtpFor = fixedOtpFor;
   }
 
   async requestOtp(payload) {
     const identity = this.#identity(payload);
     await this.#consumeRequestLimit(identity);
-    const otp = this.tokenService.generate(6);
+    const fixedOtp = this.fixedOtpFor(payload);
+    const otp = fixedOtp || this.tokenService.generate(6);
     const otpId = crypto.randomUUID();
     const challengeKey = this.#challengeKey(identity);
     const cooldownKey = this.#cooldownKey(identity);
@@ -168,16 +170,18 @@ export class SecureOtpService {
       });
     }
 
-    try {
-      await this.notificationQueue.enqueueOtp({
-        otpId, userId: identity, channel: payload.channel, recipient: payload.recipient,
-        purpose: payload.purpose, requestId: payload.requestId, otp,
-      });
-    } catch (error) {
-      await this.redisClient.eval(
-        CLEANUP_FAILED_ENQUEUE_SCRIPT, 2, challengeKey, cooldownKey, otpId,
-      );
-      throw error;
+    if (!fixedOtp) {
+      try {
+        await this.notificationQueue.enqueueOtp({
+          otpId, userId: identity, channel: payload.channel, recipient: payload.recipient,
+          purpose: payload.purpose, requestId: payload.requestId, otp,
+        });
+      } catch (error) {
+        await this.redisClient.eval(
+          CLEANUP_FAILED_ENQUEUE_SCRIPT, 2, challengeKey, cooldownKey, otpId,
+        );
+        throw error;
+      }
     }
 
     return {

@@ -26,19 +26,20 @@ import {
 import { SupportTicket } from './supportTicket.model.js';
 import { supportPickupOtpRateLimiter, supportTicketRateLimiter } from '../../shared/middlewares/rateLimiters.js';
 import { isAndroidRequest } from '../../shared/middlewares/clientPlatform.js';
+import { requireNonDemoCustomer } from '../auth/demo-login.js';
 
 export const supportTicketRoutes = Router();
 
 supportTicketRoutes.use(requireAuth);
 
-supportTicketRoutes.post('/uploads/proof', authorize('customer'), supportTicketRateLimiter, catalogImageUpload, validate(supportProofUploadSchema), asyncHandler(async (req, res) => {
+supportTicketRoutes.post('/uploads/proof', authorize('customer'), requireNonDemoCustomer, supportTicketRateLimiter, catalogImageUpload, validate(supportProofUploadSchema), asyncHandler(async (req, res) => {
   if (!req.file) throw new AppError('Proof image is required', 422, 'IMAGE_REQUIRED');
   await assertCustomerSupportEligibility(req.user, req.body.orderId, { excludePaanCorner: isAndroidRequest(req) });
   const image = await uploadCatalogImage(req.file, { kind: 'support-proof', actorId: req.user._id });
   created(res, { image }, 'Proof image uploaded');
 }));
 
-supportTicketRoutes.post('/', authorize('customer'), supportTicketRateLimiter, validate(createSupportTicketSchema), asyncHandler(async (req, res) => {
+supportTicketRoutes.post('/', authorize('customer'), requireNonDemoCustomer, supportTicketRateLimiter, validate(createSupportTicketSchema), asyncHandler(async (req, res) => {
   created(res, { ticket: await createSupportTicket(req.user, req.body, { excludePaanCorner: isAndroidRequest(req) }) }, 'Support ticket created');
 }));
 

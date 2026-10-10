@@ -15,13 +15,16 @@ import { OTP_CODE_PATTERN } from './otp.constants.js';
 import { normalizeIndianMobile } from './phone.js';
 import { digestLoginProof, LoginCompletion } from './login-completion.model.js';
 import { decryptTotpSecret, verifyTotpCode } from './totp.service.js';
+import { DEMO_LOGIN_PHONE, DEMO_LOGIN_USER_ID, demoLoginRequested } from './demo-login.js';
+import { env } from '../../config/env.js';
 
 function publicUser(user) {
   return {
     id: user.id,
     name: user.name,
     email: user.email,
-    phone: user.phone,
+    phone: user.demoAccount ? DEMO_LOGIN_PHONE : user.phone,
+    demoAccount: Boolean(user.demoAccount),
     role: user.role,
     assignmentExpiresAt: user.assignmentExpiresAt,
   };
@@ -119,9 +122,9 @@ function isTransactionUnavailable(error) {
   return false;
 }
 
-async function findLoginUser(normalizedPhone, session) {
+async function findLoginUser(normalizedPhone, session, demo = false) {
   return withSession(
-    User.findOne({ phone: normalizedPhone }).select('+refreshTokenHash'),
+    (demo ? User.findById(DEMO_LOGIN_USER_ID) : User.findOne({ phone: normalizedPhone })).select('+refreshTokenHash'),
     session,
   );
 }
@@ -216,6 +219,7 @@ export async function refreshSession(refreshToken, clientPlatform = 'web') {
     throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
   }
   if (user.status !== 'active') throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
+  if (user.demoAccount && !env.DEMO_LOGIN_ENABLED) throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH');
   if (normalizedPlatform === 'android' && user.role !== 'customer') {
     throw new AppError('The Android app only supports customer accounts', 403, 'ANDROID_CUSTOMER_ONLY');
   }
@@ -248,10 +252,13 @@ function normalizePhone(phone) {
 
 export async function requestOtpWithDependencies(phone, requestId, {
   getOtpService = getSevenHeavenOtpService,
+  demo = false,
+  demoEnabled = env.DEMO_LOGIN_ENABLED,
 } = {}) {
   const normalizedPhone = normalizePhone(phone);
+  if (demo && !demoLoginRequested(normalizedPhone, demo, demoEnabled)) throw new AppError('Demo login is unavailable', 404, 'DEMO_LOGIN_UNAVAILABLE');
   const result = await getOtpService().requestOtp({
-    ...buildLoginOtpPayload(normalizedPhone),
+    ...buildLoginOtpPayload(normalizedPhone, demo),
     requestId,
   });
 
@@ -261,16 +268,19 @@ export async function requestOtpWithDependencies(phone, requestId, {
   };
 }
 
-export async function requestOtp(phone, requestId) {
-  return requestOtpWithDependencies(phone, requestId);
+export async function requestOtp(phone, requestId, demo = false) {
+  return requestOtpWithDependencies(phone, requestId, { demo });
 }
 
 export async function resendOtpWithDependencies(phone, requestId, {
   getOtpService = getSevenHeavenOtpService,
+  demo = false,
+  demoEnabled = env.DEMO_LOGIN_ENABLED,
 } = {}) {
   const normalizedPhone = normalizePhone(phone);
+  if (demo && !demoLoginRequested(normalizedPhone, demo, demoEnabled)) throw new AppError('Demo login is unavailable', 404, 'DEMO_LOGIN_UNAVAILABLE');
   const result = await getOtpService().resendOtp({
-    ...buildLoginOtpPayload(normalizedPhone),
+    ...buildLoginOtpPayload(normalizedPhone, demo),
     requestId,
   });
   return {
@@ -279,11 +289,11 @@ export async function resendOtpWithDependencies(phone, requestId, {
   };
 }
 
-export async function resendOtp(phone, requestId) {
-  return resendOtpWithDependencies(phone, requestId);
+export async function resendOtp(phone, requestId, demo = false) {
+  return resendOtpWithDependencies(phone, requestId, { demo });
 }
 
-export async function completeVerifiedLoginWithDependencies({ normalizedPhone, name, proofId, clientPlatform = 'web' }, {
+export async function completeVerifiedLoginWithDependencies({ normalizedPhone, name, proofId, clientPlatform = 'web', demo = false }, {
   digestProof = digestLoginProof,
   findCompletion = findCompletedLogin,
   startSession = () => mongoose.startSession(),
@@ -299,7 +309,9 @@ export async function completeVerifiedLoginWithDependencies({ normalizedPhone, n
   insertCompletion = insertLoginCompletion,
   replayCompletion = completedTokenPayload,
   transactionUnavailable = isTransactionUnavailable,
+  demoEnabled = env.DEMO_LOGIN_ENABLED,
 } = {}) {
+  if (demo && !demoLoginRequested(normalizedPhone, demo, demoEnabled)) throw new AppError('Demo login is unavailable', 404, 'DEMO_LOGIN_UNAVAILABLE');
   const normalizedPlatform = normalizeClientPlatform(clientPlatform);
   const proofDigest = digestProof(proofId);
   const existing = await findCompletion(proofDigest);
@@ -317,14 +329,18 @@ export async function completeVerifiedLoginWithDependencies({ normalizedPhone, n
         const completed = await findCompletion(proofDigest, session);
         if (completed) return;
 
-        let user = await findUser(normalizedPhone, session);
+        let user = await findUser(normalizedPhone, session, demo);
         if (!user) {
           user = await createUser({
-            name: name || `Customer ${normalizedPhone.slice(-4)}`,
-            phone: normalizedPhone,
+            ...(demo ? { _id: DEMO_LOGIN_USER_ID, demoAccount: true } : { phone: normalizedPhone }),
+            name: demo ? 'Demo Customer' : name || `Customer ${normalizedPhone.slice(-4)}`,
             passwordHash,
             role: 'customer',
           }, session);
+        }
+
+        if (user.role !== 'customer' || Boolean(user.demoAccount) !== demo) {
+          throw new AppError('Customer OTP sign-in is unavailable for this account', 403, 'CUSTOMER_OTP_ONLY');
         }
 
         if (user.status !== 'active') {
@@ -384,19 +400,21 @@ export async function completeVerifiedLogin(payload) {
   return completeVerifiedLoginWithDependencies(payload);
 }
 
-export async function verifyOtpWithDependencies({ phone, otp, name, clientPlatform = 'web' }, {
+export async function verifyOtpWithDependencies({ phone, otp, name, clientPlatform = 'web', demo = false }, {
   otpService,
   getOtpService = getSevenHeavenOtpService,
   completeLogin = completeVerifiedLogin,
+  demoEnabled = env.DEMO_LOGIN_ENABLED,
 }) {
   const normalizedPhone = normalizePhone(phone);
   if (typeof otp !== 'string' || !OTP_CODE_PATTERN.test(otp)) {
     throw new AppError('OTP must contain exactly six decimal digits', 422, 'INVALID_OTP');
   }
+  if (demo && !demoLoginRequested(normalizedPhone, demo, demoEnabled)) throw new AppError('Demo login is unavailable', 404, 'DEMO_LOGIN_UNAVAILABLE');
 
   const resolvedOtpService = otpService || getOtpService();
   const otpPayload = {
-    ...buildLoginOtpPayload(normalizedPhone),
+    ...buildLoginOtpPayload(normalizedPhone, demo),
     otp,
   };
   const verification = await resolvedOtpService.verifyOtp(otpPayload);
@@ -406,9 +424,9 @@ export async function verifyOtpWithDependencies({ phone, otp, name, clientPlatfo
 
   let result;
   try {
-    result = await completeLogin({ normalizedPhone, name, proofId: verification.proofId, clientPlatform });
+    result = await completeLogin({ normalizedPhone, name, proofId: verification.proofId, clientPlatform, demo });
   } catch (error) {
-    if (error?.code === 'ACCOUNT_BLOCKED' || error?.code === 'OTP_COMPLETION_STALE') {
+    if (error?.code === 'ACCOUNT_BLOCKED' || error?.code === 'OTP_COMPLETION_STALE' || error?.code === 'CUSTOMER_OTP_ONLY') {
       let closed = false;
       try {
         closed = await resolvedOtpService.denyVerifiedProof(otpPayload, verification.proofId);

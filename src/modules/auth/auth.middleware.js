@@ -42,6 +42,7 @@ export function roleMatchesAuthContext(role, context) {
 export function userSessionIsCurrent(user, payload, context, now = new Date()) {
   return Boolean(user
     && user.status === 'active'
+    && !(user.demoAccount && !env.DEMO_LOGIN_ENABLED)
     && payload.tokenVersion === Number(user.tokenVersion || 0)
     && !(user.role === 'admin' && (user.staffSeat !== 'PRIMARY_ADMIN' || !user.assignmentExpiresAt || user.assignmentExpiresAt <= now))
     && !(user.role === 'owner' && user.staffSeat !== 'PRIMARY_OWNER')

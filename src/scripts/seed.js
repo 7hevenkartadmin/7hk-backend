@@ -103,20 +103,20 @@ await DeliverySlot.insertMany([
 if (process.env.NODE_ENV !== 'production') {
   const adminPasswordHash = await User.hashPassword('admin12345');
   await User.findOneAndUpdate(
-    { phone: '+919999999999' },
-    {
+    { staffSeat: 'PRIMARY_ADMIN' },
+    { $setOnInsert: {
       name: '7Heven Admin',
       email: 'admin@7heven.com',
-      phone: '+919999999999',
+      phone: '+919888888888',
       role: 'admin',
       status: 'active',
       staffSeat: 'PRIMARY_ADMIN',
       assignmentExpiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
       passwordHash: adminPasswordHash,
-    },
+    } },
     { upsert: true, new: true },
   );
-  console.log('Admin user created for development');
+  console.log('Development admin account ensured');
 } else {
   console.log('Skipping admin user creation in production environment');
 }
