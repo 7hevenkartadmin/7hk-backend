@@ -28,6 +28,7 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:5173,http://admin.localhost:5173'),
   COOKIE_SECURE: strictEnvironmentBoolean(false),
   ADMIN_APP_URL: z.string().url().default('http://localhost:5174'),
+  GST_FILING_ENABLED: strictEnvironmentBoolean(false),
   OWNER_TOTP_ENCRYPTION_KEY: z.union([z.string().regex(/^[a-fA-F0-9]{64}$/), z.literal('')]).default(''),
   SMTP_HOST: z.string().trim().optional().default(''),
   SMTP_PORT: z.coerce.number().int().positive().max(65535).default(587),

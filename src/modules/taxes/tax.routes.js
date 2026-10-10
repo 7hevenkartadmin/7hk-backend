@@ -12,6 +12,7 @@ import { reportDateRange, taxDocumentVerified, taxClassificationVerified, filing
 import { classificationSchema, creditNoteSchema, portalFilingSchema, prepareFilingSchema, taxIdSchema, taxQuerySchema } from './tax.validation.js';
 import { exportTaxWorkpaper } from './tax.export.js';
 import { streamInvoicePdf } from '../orders/invoice.service.js';
+import { env } from '../../config/env.js';
 
 export const taxRoutes = Router();
 taxRoutes.use(requireAuth, authorize('admin', 'manager', 'owner'));
@@ -47,6 +48,13 @@ taxRoutes.get('/export/:type', validate(taxQuerySchema, 'query'), asyncHandler(a
   const { report, documents } = await loadTaxReport(req.query);
   await sendExport(req, res, report, documents);
 }));
+
+// Keep the owner filing workflow unavailable until launch, including direct API calls.
+const requireGstFilingEnabled = (_req, _res, next) => {
+  if (!env.GST_FILING_ENABLED) return next(new AppError('GST filing is currently unavailable.', 404, 'GST_FILING_DISABLED'));
+  return next();
+};
+taxRoutes.use('/filings', requireGstFilingEnabled);
 
 taxRoutes.get('/filings', validate(taxQuerySchema, 'query'), asyncHandler(async (req, res) => {
   const range = reportDateRange(req.query);
@@ -89,7 +97,7 @@ taxRoutes.get('/documents/:id/pdf', validate(taxIdSchema, 'params'), asyncHandle
   }
   streamInvoicePdf(presentation.order, res, presentation);
 }));
-taxRoutes.post('/documents/:id/credit-notes', authorize('owner'), validate(taxIdSchema, 'params'), validate(creditNoteSchema), asyncHandler(async (req, res) => {
+taxRoutes.post('/documents/:id/credit-notes', authorize('owner'), requireGstFilingEnabled, validate(taxIdSchema, 'params'), validate(creditNoteSchema), asyncHandler(async (req, res) => {
   await primeTaxSeries();
   const session = await mongoose.startSession();
   let document;
@@ -103,7 +111,7 @@ taxRoutes.post('/documents/:id/credit-notes', authorize('owner'), validate(taxId
   await audit({ req, action: 'tax.credit_note.issue', entityType: 'TaxDocument', entityId: document._id, after: { number: document.number, original: req.params.id, checksum: document.checksum } });
   created(res, { document }, 'Linked credit note issued');
 }));
-taxRoutes.post('/documents/:id/classifications', authorize('owner'), validate(taxIdSchema, 'params'), validate(classificationSchema), asyncHandler(async (req, res) => {
+taxRoutes.post('/documents/:id/classifications', authorize('owner'), requireGstFilingEnabled, validate(taxIdSchema, 'params'), validate(classificationSchema), asyncHandler(async (req, res) => {
   const document = await TaxDocument.findById(req.params.id).lean();
   if (!document) throw new AppError('Tax document not found.', 404, 'TAX_DOCUMENT_NOT_FOUND');
   const classification = await recordTaxClassification(document, req.body, req.user);

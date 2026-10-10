@@ -161,13 +161,33 @@ test('tax records, exports and filing actions reject unauthenticated requests', 
   assert.equal(response.status, 401);
 });
 
-test('administrators cannot seal filings, issue credits or change classification evidence', async (t) => {
+test('disabled filing endpoints reject authenticated requests, including direct owner URLs', async (t) => {
+  const client = await createTestClient(); t.after(() => client.close());
+  const user = { id: String(new mongoose.Types.ObjectId()), role: 'owner', tokenVersion: 0, status: 'active', staffSeat: 'PRIMARY_OWNER' };
+  t.mock.method(User, 'findById', async () => user);
+  const authorization = `Bearer ${signAccessToken(user)}`;
+  const id = String(new mongoose.Types.ObjectId());
+  for (const [method, path] of [
+    ['GET', '/taxes/filings'],
+    ['POST', '/taxes/filings'],
+    ['GET', `/taxes/filings/${id}/export/register`],
+    ['POST', `/taxes/filings/${id}/acknowledgements`],
+    ['POST', `/taxes/documents/${id}/credit-notes`],
+    ['POST', `/taxes/documents/${id}/classifications`],
+  ]) {
+    const { response, body } = await client.request(`/api/v1${path}`, { method, headers: { authorization }, ...(method === 'POST' ? { body: '{}' } : {}) });
+    assert.equal(response.status, 404, `${method} ${path}`);
+    assert.equal(body.code, 'GST_FILING_DISABLED');
+  }
+});
+
+test('administrators cannot issue credits or change classification evidence', async (t) => {
   const client = await createTestClient(); t.after(() => client.close());
   const user = { id: String(new mongoose.Types.ObjectId()), role: 'admin', tokenVersion: 0, status: 'active', staffSeat: 'PRIMARY_ADMIN', assignmentExpiresAt: new Date(Date.now() + 86400000) };
   t.mock.method(User, 'findById', async () => user);
   const authorization = `Bearer ${signAccessToken(user)}`;
   const id = String(new mongoose.Types.ObjectId());
-  for (const path of ['/taxes/filings', `/taxes/filings/${id}/acknowledgements`, `/taxes/documents/${id}/credit-notes`, `/taxes/documents/${id}/classifications`]) {
+  for (const path of [`/taxes/documents/${id}/credit-notes`, `/taxes/documents/${id}/classifications`]) {
     const { response } = await client.request(`/api/v1${path}`, { method: 'POST', headers: { authorization }, body: '{}' });
     assert.equal(response.status, 403);
   }

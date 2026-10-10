@@ -64,6 +64,9 @@ function assertIssueFields(source, expectedFields, forbiddenValues = []) {
 test('environment booleans default only when absent and preserve exact true and false strings', () => {
   assert.equal(parseEnvironment(base).COOKIE_SECURE, false);
   assert.equal(parseEnvironment(base).OTP_WORKER_ENABLED, true);
+  assert.equal(parseEnvironment(base).GST_FILING_ENABLED, false);
+  assert.equal(parseEnvironment({ ...base, GST_FILING_ENABLED: 'true' }).GST_FILING_ENABLED, true);
+  assert.equal(parseEnvironment({ ...base, GST_FILING_ENABLED: 'false' }).GST_FILING_ENABLED, false);
   assert.equal(parseEnvironment({ ...base, COOKIE_SECURE: 'false' }).COOKIE_SECURE, false);
   assert.equal(parseEnvironment({ ...base, COOKIE_SECURE: 'true' }).COOKIE_SECURE, true);
   assert.equal(parseEnvironment({ ...base, OTP_WORKER_ENABLED: 'false' }).OTP_WORKER_ENABLED, false);
@@ -72,6 +75,7 @@ test('environment booleans default only when absent and preserve exact true and 
   for (const invalidValue of ['1', '0', 'yes', 'False', '', true, false]) {
     assert.throws(() => parseEnvironment({ ...base, COOKIE_SECURE: invalidValue }));
     assert.throws(() => parseEnvironment({ ...base, OTP_WORKER_ENABLED: invalidValue }));
+    assert.throws(() => parseEnvironment({ ...base, GST_FILING_ENABLED: invalidValue }));
   }
 });
 
