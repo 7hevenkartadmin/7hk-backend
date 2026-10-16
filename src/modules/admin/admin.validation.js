@@ -4,6 +4,13 @@ import { parseStoreDate } from '../../shared/utils/storeDate.js';
 
 const dateString = z.string().refine((value) => Boolean(parseStoreDate(value)), 'Invalid date. Use YYYY-MM-DD');
 
+export const adminCustomersQuerySchema = z.object({
+  page: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER / 20).default(1),
+  limit: z.coerce.number().int().min(20).max(20).default(20),
+  search: z.string().trim().max(80).optional(),
+  status: z.enum(['active', 'blocked']).optional(),
+});
+
 export const adminOrdersQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(15),

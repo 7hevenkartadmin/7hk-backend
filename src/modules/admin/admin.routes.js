@@ -12,8 +12,8 @@ import { User } from '../users/user.model.js';
 import { AuditLog } from '../audit/audit.model.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { auditLogsQuerySchema, adminOrdersQuerySchema, dashboardStatsQuerySchema } from './admin.validation.js';
-import { buildInventoryDashboardPipeline, getDashboardStats, listAdminOrders } from './admin.service.js';
+import { auditLogsQuerySchema, adminCustomersQuerySchema, adminOrdersQuerySchema, dashboardStatsQuerySchema } from './admin.validation.js';
+import { buildInventoryDashboardPipeline, getDashboardStats, listAdminCustomers, listAdminOrders } from './admin.service.js';
 import { parseStoreDate, todayStoreRange } from '../../shared/utils/storeDate.js';
 import { criticalAuditMongoFilter, criticalAuditType } from '../audit/criticalAudit.js';
 import { invoicePresentationForOrder } from '../taxes/tax.service.js';
@@ -22,9 +22,9 @@ export const adminRoutes = Router();
 
 adminRoutes.use(requireAuth, authorize('admin', 'manager'));
 
-adminRoutes.get('/customers', asyncHandler(async (_req, res) => {
-  const customers = await User.find({ role: 'customer' }).sort({ createdAt: -1 }).limit(200);
-  ok(res, { customers }, 'Customers loaded');
+adminRoutes.get('/customers', validate(adminCustomersQuerySchema, 'query'), asyncHandler(async (req, res) => {
+  const { items, meta } = await listAdminCustomers(req.query);
+  ok(res, { customers: items, meta }, 'Customers loaded');
 }));
 
 adminRoutes.patch('/customers/:id/status', authorize('admin'), asyncHandler(async (req, res) => {

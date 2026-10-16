@@ -31,6 +31,27 @@ function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+export function buildAdminCustomerFilter(query) {
+  const filter = { role: 'customer' };
+  if (query.status) filter.status = query.status;
+  if (query.search) {
+    const pattern = new RegExp(escapeRegex(query.search), 'i');
+    filter.$or = ['name', 'phone', 'email'].map((field) => ({ [field]: pattern }));
+  }
+  return filter;
+}
+
+export async function listAdminCustomers(query) {
+  const { page, limit, skip } = getPagination({ ...query, limit: 20 });
+  const filter = buildAdminCustomerFilter(query);
+  const [items, total] = await Promise.all([
+    User.find(filter).select('name email phone addresses lastLoginAt status createdAt')
+      .sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).lean(),
+    User.countDocuments(filter),
+  ]);
+  return paged(items, total, page, limit);
+}
+
 export function buildAdminOrderFilter(query) {
   const filter = {};
   if (query.status) filter.status = query.status;
