@@ -5,7 +5,7 @@ export const PAYMENT_RESERVATION_STATES = ['held', 'consuming', 'consumed', 'rel
 const reservationItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   variantId: mongoose.Schema.Types.ObjectId,
-  quantity: { type: Number, min: 1, max: 10, required: true },
+  quantity: { type: Number, min: 1, max: 5, required: true },
 }, { _id: false });
 
 const reservationSchema = new mongoose.Schema({

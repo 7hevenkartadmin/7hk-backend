@@ -23,17 +23,17 @@ test('public products expose availability without leaking exact inventory', () =
   assert.equal(result.variants[0].maxOrderableQuantity, 0);
   assert.equal(result.variants[1].stock, undefined);
   assert.equal(result.variants[1].isAvailable, true);
-  assert.equal(result.variants[1].maxOrderableQuantity, 7);
+  assert.equal(result.variants[1].maxOrderableQuantity, 5);
   assert.equal(product.variants[0].stock, 0);
 });
 
 test('public products without variants expose aggregate and default availability', () => {
   assert.deepEqual(toPublicProduct({ stock: 19, reservedStock: 2, variants: [] }), {
     isAvailable: true,
-    maxOrderableQuantity: 10,
+    maxOrderableQuantity: 5,
     defaultVariantId: undefined,
     defaultVariantAvailable: true,
-    defaultVariantMaxOrderableQuantity: 10,
+    defaultVariantMaxOrderableQuantity: 5,
     variants: [],
   });
 });

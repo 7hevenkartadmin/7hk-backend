@@ -1,4 +1,4 @@
-export const MAX_ITEM_QUANTITY = 10;
+export const MAX_ITEM_QUANTITY = 5;
 
 export function netAvailableStock(stock, reservedStock = 0) {
   return Math.max(0, Number(stock || 0) - Number(reservedStock || 0));

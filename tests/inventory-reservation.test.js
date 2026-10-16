@@ -64,14 +64,14 @@ function queryReturning(items, calls) {
 }
 
 test('shared item quantity and net availability helpers enforce the public cap', () => {
-  assert.equal(MAX_ITEM_QUANTITY, 10);
+  assert.equal(MAX_ITEM_QUANTITY, 5);
   assert.equal(assertItemQuantity(1), 1);
-  assert.equal(assertItemQuantity(10), 10);
+  assert.equal(assertItemQuantity(5), 5);
   assert.throws(() => assertItemQuantity(0), { code: 'ITEM_QUANTITY_LIMIT' });
-  assert.throws(() => assertItemQuantity(11), { code: 'ITEM_QUANTITY_LIMIT' });
+  assert.throws(() => assertItemQuantity(6), { code: 'ITEM_QUANTITY_LIMIT' });
   assert.equal(netAvailableStock(7, 3), 4);
   assert.equal(netAvailableStock(2, 8), 0);
-  assert.equal(maxOrderableQuantity(50, 2), 10);
+  assert.equal(maxOrderableQuantity(50, 2), 5);
   assert.equal(maxOrderableQuantity(50, 2, { isActive: false }), 0);
 });
 
@@ -140,18 +140,18 @@ test('paid order consumption decrements stock and its reservation and writes an 
   assert.match(movementRows[0].idempotencyKey, new RegExp(String(orderId)));
 });
 
-test('Razorpay and order request schemas share the ten-unit item boundary', async () => {
+test('Razorpay and order request schemas share the five-unit item boundary', async () => {
   const { createOrderSchema } = await import('../src/modules/orders/order.validation.js');
   const { createRazorpayOrderSchema } = await import('../src/modules/payments/payment.validation.js');
   const base = {
-    items: [{ productId: '507f1f77bcf86cd799439011', quantity: 10 }],
+    items: [{ productId: '507f1f77bcf86cd799439011', quantity: 5 }],
     addressId: '507f1f77bcf86cd799439012',
     slotId: '507f1f77bcf86cd799439013',
   };
   assert.equal(createRazorpayOrderSchema.safeParse(base).success, true);
-  assert.equal(createRazorpayOrderSchema.safeParse({ ...base, items: [{ ...base.items[0], quantity: 11 }] }).success, false);
+  assert.equal(createRazorpayOrderSchema.safeParse({ ...base, items: [{ ...base.items[0], quantity: 6 }] }).success, false);
   assert.equal(createOrderSchema.safeParse({ ...base, paymentMethod: 'cod', codTermsAccepted: true }).success, true);
-  assert.equal(createOrderSchema.safeParse({ ...base, paymentMethod: 'cod', items: [{ ...base.items[0], quantity: 11 }] }).success, false);
+  assert.equal(createOrderSchema.safeParse({ ...base, paymentMethod: 'cod', items: [{ ...base.items[0], quantity: 6 }] }).success, false);
 });
 
 test('PaymentIntent validates typed reservation ownership fields', async () => {
